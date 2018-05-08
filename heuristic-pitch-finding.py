@@ -12,16 +12,18 @@ class HeuristicPitchFinding(RodanTask):
     input_port_types = [{
         'name': 'Staff Polygons (Miyao results)',
         'resource_types': ['application/gamera-polygons+txt'],
-        'minimum': 0
+        'minimum': 1,
+        'maximum': 1
     },
     {
         'name': 'GameraXML - Connected Components',
         'resource_types': ['application/gamera+xml'],
-        'minimum': 1
+        'minimum': 1,
+        'maximum': 1
     }]
 
     output_port_types = [{
-        'name': 'GameraXML - Connected Components',
+        'name': 'GameraXML - Connected Components + Pitch',
         'resource_types': ['application/gamera+xml'],
         'minimum': 1,
         'maximum': 1
@@ -31,4 +33,4 @@ class HeuristicPitchFinding(RodanTask):
         
         output_xml = inputs[1]
         output_xml.write_filename(
-            outputs['GameraXML - Connected Components'][0]['resource_path'])
+            outputs['GameraXML - Connected Components + Pitch'][0]['resource_path'])
