@@ -2,21 +2,33 @@ from rodan.jobs.base import RodanTask
 
 class HeuristicPitchFinding(RodanTask):
     name = 'Heuristic Pitch Finding'
-    author = 'The Rodan Master'
-    description = 'Output "Hello World"'
+    author = 'Noah Baxter'
+    description = 'Uses a Polygon of staves and a GameraXML of neumes to create a GameraXML containing neumes with corresponding pitch information.'
     settings = {}
     enabled = True
     category = "Test"
     interactive = False
 
-    input_port_types = ()
-    output_port_types = (
-        {'name': 'Text output', 'minimum': 1, 'maximum': 1, 'resource_types': ['text/plain']},
-    )
+    input_port_types = [{
+        'name': 'Staff Polygons (Miyao results)',
+        'resource_types': ['application/gamera-polygons+txt'],
+        'minimum': 0
+    },
+    {
+        'name': 'GameraXML - Connected Components',
+        'resource_types': ['application/gamera+xml'],
+        'minimum': 1
+    }]
+
+    output_port_types = [{
+        'name': 'GameraXML - Connected Components',
+        'resource_types': ['application/gamera+xml'],
+        'minimum': 1,
+        'maximum': 1
+    }]
 
     def run_my_task(self, inputs, settings, outputs):
-        outfile_path = outputs['Text output'][0]['resource_path']
-        outfile = open(outfile_path, "w")
-        outfile.write("Hello, world!")
-        outfile.close()
-        return True
+        
+        output_xml = inputs[1]
+        output_xml.write_filename(
+            outputs['GameraXML - Connected Components'][0]['resource_path'])
