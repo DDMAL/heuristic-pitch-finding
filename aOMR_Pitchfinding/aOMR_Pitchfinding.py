@@ -79,7 +79,7 @@ class aOMR_Pitchfinding(RodanTask):
         output_json = []
         pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
 
-        for glyph in enumerate(sorted_glyphs):
+        for glyph in sorted_glyphs:
 
             current_json = {}
             pitch_info = {}
