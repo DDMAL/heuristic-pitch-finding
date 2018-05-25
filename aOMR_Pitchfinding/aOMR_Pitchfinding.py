@@ -6,16 +6,35 @@ from rodan.jobs.base import RodanTask
 import json
 
 class aOMR_Pitchfinding(RodanTask):
-    name = 'aOMR Miyao Pitch Finding'
+    name = 'aOMR Pitch Finding'
     author = 'Noah Baxter'
     description = 'Calculates pitch values from an image and set of glyphs and returns a json that can be used to construct a MEI file'
-    settings = {}
+    settings = {
+        'title': 'aOMR settings',
+        'type': 'object',
+        'required': ['Number of lines', 'Discard Size'],
+        'properties': {
+            'Number of lines': {
+                'type': 'integer',
+                'default': 0,
+                'minimum': 0,
+                'maximum': 1048576,
+                'description': 'Number of lines within one staff. When zero, the number is automatically detected.'
+            },
+            'Discard Size': {
+                'type': 'integer',
+                'default': 12,
+                'minimum': 5,
+                'maximum': 25,
+                'description': ''
+            }
+        } 
+    }
     enabled = True
     category = "Test"
     interactive = False
-
     input_port_types = [{
-        'name': 'Image of only staves and neumes (RGB, greyscale, or onebit)',
+        'name': 'Image containing notes and staves (RGB, greyscale, or onebit)',
         'resource_types': ['image/rgb+png', 'image/onebit+png','image/greyscale+png'],
         'minimum': 1,
         'maximum': 1,
@@ -29,7 +48,7 @@ class aOMR_Pitchfinding(RodanTask):
         'is_list': False
     }]
     output_port_types = [{
-        'name': 'JSON - CC + Pitch Features',
+        'name': 'JSOMR - CC + Pitch Features',
         'resource_types': ['application/json'],
         'minimum': 1,
         'maximum': 1,
@@ -38,17 +57,17 @@ class aOMR_Pitchfinding(RodanTask):
 
     def run_my_task(self, inputs, settings, outputs):
         
-        image = load_image(inputs['Image of only staves and neumes (RGB, greyscale, or onebit)'][0]['resource_path'])
-        # print image_path
+        image = load_image(inputs['Image containing notes and staves (RGB, greyscale, or onebit)'][0]['resource_path'])
         glyphs = gamera_xml.glyphs_from_xml(inputs['GameraXML - Connected Components'][0]['resource_path'])
-
+        
         kwargs = {
-        'lines_per_staff': 0,
-        'staff_finder': 0,
+        'staff_finder': 0,      # 0 for Miyao
         'staff_removal': 0,
         'binarization': 1,
-        'discard_size': 12,
         }
+
+        kwargs['lines_per_staff'] = settings['Number of lines']
+        kwargs['discard_size'] = settings['Discard Size']
 
         aomr_obj = AomrObject(image, **kwargs)
 
@@ -84,8 +103,7 @@ class aOMR_Pitchfinding(RodanTask):
 
             output_json.append(cur_json)
 
-
-        outfile_path = outputs['JSON - CC + Pitch Features'][0]['resource_path']
+        outfile_path = outputs['JSOMR - CC + Pitch Features'][0]['resource_path']
         outfile = open(outfile_path, "w")
         outfile.write(json.dumps(output_json))
         outfile.close()
