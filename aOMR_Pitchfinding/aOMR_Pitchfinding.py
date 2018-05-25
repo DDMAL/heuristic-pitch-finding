@@ -105,7 +105,7 @@ class aOMR_Pitchfinding(RodanTask):
 
 
         outfile_path = outputs['JSOMR - CC + Pitch Features'][0]['resource_path']
-        with open(outfile_path, "w") as outfile
+        with open(outfile_path, "w") as outfile:
             outfile.write(json.dumps(output_json))
         
         return True
