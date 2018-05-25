@@ -31,7 +31,7 @@ class aOMR_Pitchfinding(RodanTask):
         } 
     }
     enabled = True
-    category = "Test"
+    category = "Pitch finder"
     interactive = False
     input_port_types = [{
         'name': 'Image containing notes and staves (RGB, greyscale, or onebit)',
@@ -79,32 +79,33 @@ class aOMR_Pitchfinding(RodanTask):
         output_json = []
         pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
 
-        for i, g in enumerate(sorted_glyphs):
+        for glyph in enumerate(sorted_glyphs):
 
-            cur_json = {}
+            current_json = {}
             pitch_info = {}
             glyph_info = {}
 
             # get pitch information
-            for j, pf in enumerate(g[1:]):
+            for j, pf in enumerate(glyph[1:]):
                 pitch_info[pitch_feature_names[j]] = str(pf)
-            cur_json['pitch'] = pitch_info
+            current_json['pitch'] = pitch_info
 
             # get glyph information
             glyph_info['bounding_box'] = {
-                'ncols': g[0].ncols,
-                'nrows': g[0].nrows,
-                'ulx': g[0].ul.x,
-                'uly': g[0].ul.y,
+                'ncols': glyph[0].ncols,
+                'nrows': glyph[0].nrows,
+                'ulx': glyph[0].ul.x,
+                'uly': glyph[0].ul.y,
             }
-            glyph_info['state'] = gamera_xml.classification_state_to_name(g[0].classification_state)
-            glyph_info['name'] = g[0].id_name[0][1]
-            cur_json['glyph'] = glyph_info
+            glyph_info['state'] = gamera_xml.classification_state_to_name(glyph[0].classification_state)
+            glyph_info['name'] = glyph[0].id_name[0][1]
+            current_json['glyph'] = glyph_info
 
-            output_json.append(cur_json)
+            output_json.append(current_json)
+
 
         outfile_path = outputs['JSOMR - CC + Pitch Features'][0]['resource_path']
-        outfile = open(outfile_path, "w")
-        outfile.write(json.dumps(output_json))
-        outfile.close()
+        with open(outfile_path, "w") as outfile
+            outfile.write(json.dumps(output_json))
+        
         return True
