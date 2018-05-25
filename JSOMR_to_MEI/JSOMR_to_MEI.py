@@ -40,17 +40,17 @@ class JSOMR_to_MEI(RodanTask):
     }]
 
     def run_my_task(self, inputs, settings, outputs):
-        
-        jsomr = json.loads(inputs['JSOMR (JSON of CC and pitch)'][0]['resource_path'])
+
+        with open(inputs['JSOMR (JSON of CC and pitch)'][0]['resource_path'], 'r') as file:
+            jsomr = json.loads(file.read())
         print jsomr
-
-        kwargs = {
-
-        }
 
         mei_version = settings['MEI Version']
         print mei_version
+       
+        kwargs = {
 
+        }
 
         output_mei = jsomr
 
