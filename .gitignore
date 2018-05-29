@@ -102,5 +102,10 @@ ENV/
 
 # mypy
 .mypy_cache/
-aOMR_Pitchfinding/ignored/gamera_rodan/
+
+# my ignored stuff
+ignore
+*/ignore
+venv*
+
 copyJobsAndStartRodan.sh
