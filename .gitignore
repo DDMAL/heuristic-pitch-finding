@@ -105,7 +105,4 @@ ENV/
 
 # my ignored stuff
 ignore
-*/ignore
 venv*
-
-copyJobsAndStartRodan.sh
