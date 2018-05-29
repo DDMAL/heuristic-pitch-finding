@@ -2,7 +2,7 @@
 Pitch finding for square notation based on heuristics as a job in the workflow builder [```Rodan```](https://github.com/DDMAL/Rodan)
 
 ## Installation
-- Move the `aOMR_Pitchfinding` directory into the rodan jobs folder
+- Move this directory into the rodan jobs folder
 - If it does not already exist, create a python file called `settings.py` in the rodan folder like so: `rodan_docker/rodan/code/rodan/rodan/settings.py`
 - Copy and paste the contents of `settings.py.development` into `settings.py`
 - Include the path to this folder in the Rodan Job Package registration in the settings.py file. This should look something like the following
