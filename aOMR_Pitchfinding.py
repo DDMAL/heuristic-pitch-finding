@@ -5,6 +5,7 @@ from gamera import gamera_xml
 from rodan.jobs.base import RodanTask
 import json
 
+
 class aOMR_Pitchfinding(RodanTask):
     name = 'aOMR Pitch Finding'
     author = 'Noah Baxter'
@@ -28,19 +29,19 @@ class aOMR_Pitchfinding(RodanTask):
                 'maximum': 25,
                 'description': ''
             }
-        } 
+        }
     }
     enabled = True
     category = "Pitch finder"
     interactive = False
     input_port_types = [{
         'name': 'Image containing notes and staves (RGB, greyscale, or onebit)',
-        'resource_types': ['image/rgb+png', 'image/onebit+png','image/greyscale+png'],
+        'resource_types': ['image/rgb+png', 'image/onebit+png', 'image/greyscale+png'],
         'minimum': 1,
         'maximum': 1,
         'is_list': False
     },
-    {
+        {
         'name': 'GameraXML - Connected Components',
         'resource_types': ['application/gamera+xml'],
         'minimum': 1,
@@ -56,14 +57,14 @@ class aOMR_Pitchfinding(RodanTask):
     }]
 
     def run_my_task(self, inputs, settings, outputs):
-        
+
         image = load_image(inputs['Image containing notes and staves (RGB, greyscale, or onebit)'][0]['resource_path'])
         glyphs = gamera_xml.glyphs_from_xml(inputs['GameraXML - Connected Components'][0]['resource_path'])
-        
+
         kwargs = {
-        'staff_finder': 0,      # 0 for Miyao
-        'staff_removal': 0,
-        'binarization': 1,
+            'staff_finder': 0,      # 0 for Miyao
+            'staff_removal': 0,
+            'binarization': 1,
         }
 
         kwargs['lines_per_staff'] = settings['Number of lines']
@@ -103,9 +104,8 @@ class aOMR_Pitchfinding(RodanTask):
 
             output_json.append(current_json)
 
-
         outfile_path = outputs['JSOMR - CC + Pitch Features'][0]['resource_path']
         with open(outfile_path, "w") as outfile:
             outfile.write(json.dumps(output_json))
-        
+
         return True
