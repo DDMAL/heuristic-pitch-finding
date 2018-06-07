@@ -12,6 +12,8 @@ import copy
 import itertools
 import random
 import math
+import json
+
 from operator import itemgetter, attrgetter
 
 import logging
@@ -924,7 +926,7 @@ class AomrObject(object):
 
 
 if __name__ == "__main__":
-    (tmp, inImage, inCC) = sys.argv
+    (tmp, inCC, inImage) = sys.argv
 
     # open files to be read
     # fImage = open(inImage, 'r')
@@ -975,6 +977,6 @@ if __name__ == "__main__":
 
         output_json.append(cur_json)
 
-    with open('jsomr_output.xml', 'w') as f:
-        f.write(str(output_json))
+    with open('jsomr_output.json', 'w') as f:
+        f.write(json.dumps(output_json))
         # print output_json
