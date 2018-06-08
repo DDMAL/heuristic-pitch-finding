@@ -932,8 +932,7 @@ if __name__ == "__main__":
     # fImage = open(inImage, 'r')
 
     image = load_image(inImage)
-    glyphs = gamera_xml.glyphs_with_features_from_xml(inCC)
-
+    glyphs = gamera_xml.glyphs_from_xml(inCC)
     kwargs = {
         'lines_per_staff': 0,
         'staff_finder': 0,

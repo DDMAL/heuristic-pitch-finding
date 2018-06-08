@@ -107,3 +107,4 @@ ENV/
 ignore
 venv*
 .DS_Store
+*.json
