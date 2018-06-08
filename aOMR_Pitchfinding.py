@@ -71,38 +71,57 @@ class aOMR_Pitchfinding(RodanTask):
         kwargs['discard_size'] = settings['Discard Size']
 
         aomr_obj = AomrObject(image, **kwargs)
+        staves = aomr_obj.find_staves()                # returns true!
+        aomr_obj.staff_coords()
+        sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want
 
-        aomr_obj.find_staves()
-        staff_coords = aomr_obj.staff_coords()
-        sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)
-
-        # generate output
-        output_json = []
+        output_json = {
+            'staves': [],
+            'glyphs': [],
+        }
         pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
 
-        for glyph in sorted_glyphs:
+        # get staves information
+        for i, s in enumerate(staves):
 
-            current_json = {}
+            # get starts and end of each line
+            line_ends = []
+            for j, l in enumerate(s['line_positions']):
+                line_ends.append([l[0], l[-1]])
+
+            cur_json = {
+                'staff_no': s['staff_no'],
+                'coords': s['coords'],
+                'num_lines': s['num_lines'],
+                'line_ends': line_ends,
+            }
+
+            output_json['staves'].append(cur_json)
+
+        # get glyphs information
+        for i, g in enumerate(sorted_glyphs):
+
+            cur_json = {}
             pitch_info = {}
             glyph_info = {}
 
             # get pitch information
-            for j, pf in enumerate(glyph[1:]):
+            for j, pf in enumerate(g[1:]):
                 pitch_info[pitch_feature_names[j]] = str(pf)
-            current_json['pitch'] = pitch_info
+            cur_json['pitch'] = pitch_info
 
             # get glyph information
             glyph_info['bounding_box'] = {
-                'ncols': glyph[0].ncols,
-                'nrows': glyph[0].nrows,
-                'ulx': glyph[0].ul.x,
-                'uly': glyph[0].ul.y,
+                'ncols': g[0].ncols,
+                'nrows': g[0].nrows,
+                'ulx': g[0].ul.x,
+                'uly': g[0].ul.y,
             }
-            glyph_info['state'] = gamera_xml.classification_state_to_name(glyph[0].classification_state)
-            glyph_info['name'] = glyph[0].id_name[0][1]
-            current_json['glyph'] = glyph_info
+            glyph_info['state'] = gamera_xml.classification_state_to_name(g[0].classification_state)
+            glyph_info['name'] = g[0].id_name[0][1]
+            cur_json['glyph'] = glyph_info
 
-            output_json.append(current_json)
+            output_json['glyphs'].append(cur_json)
 
         outfile_path = outputs['JSOMR - CC + Pitch Features'][0]['resource_path']
         with open(outfile_path, "w") as outfile:

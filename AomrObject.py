@@ -301,7 +301,7 @@ class AomrObject(object):
 
         self.staff_locations = all_line_positions
         self.interpolate_staff_locations()
-        return True
+        return all_line_positions
 
     def close_enough(self, y1, y2):
         val = 0.005   # y1 and y2 are within val% of each other
@@ -942,16 +942,34 @@ if __name__ == "__main__":
     }
 
     aomr_obj = AomrObject(image, **kwargs)
-
-    st_position = aomr_obj.find_staves()                # returns true!
-    staff_coords = aomr_obj.staff_coords()
+    staves = aomr_obj.find_staves()                # returns true!
+    aomr_obj.staff_coords()
     sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want
 
-    # print sorted_glyphs
-
-    output_json = []
+    output_json = {
+        'staves': [],
+        'glyphs': [],
+    }
     pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
 
+    # get staves information
+    for i, s in enumerate(staves):
+
+        # get starts and end of each line
+        line_ends = []
+        for j, l in enumerate(s['line_positions']):
+            line_ends.append([l[0], l[-1]])
+
+        cur_json = {
+            'staff_no': s['staff_no'],
+            'coords': s['coords'],
+            'num_lines': s['num_lines'],
+            'line_ends': line_ends,
+        }
+
+        output_json['staves'].append(cur_json)
+
+    # get glyphs information
     for i, g in enumerate(sorted_glyphs):
 
         cur_json = {}
@@ -974,7 +992,7 @@ if __name__ == "__main__":
         glyph_info['name'] = g[0].id_name[0][1]
         cur_json['glyph'] = glyph_info
 
-        output_json.append(cur_json)
+        output_json['glyphs'].append(cur_json)
 
     with open('jsomr_output.json', 'w') as f:
         f.write(json.dumps(output_json))
