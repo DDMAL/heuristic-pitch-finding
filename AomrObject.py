@@ -960,9 +960,17 @@ if __name__ == "__main__":
         for j, l in enumerate(s['line_positions']):
             line_ends.append([l[0], l[-1]])
 
+        # make bounding_box same as for glyphs
+        bounding_box = {
+            'ncols': s['coords'][2] - s['coords'][0],
+            'nrows': s['coords'][3] - s['coords'][1],
+            'ulx': s['coords'][0],
+            'uly': s['coords'][1],
+        }
+
         cur_json = {
             'staff_no': s['staff_no'],
-            'coords': s['coords'],
+            'bounding_box': bounding_box,
             'num_lines': s['num_lines'],
             'line_ends': line_ends,
         }
