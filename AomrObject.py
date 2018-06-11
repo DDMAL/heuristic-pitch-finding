@@ -480,8 +480,7 @@ class AomrObject(object):
 
                 if glyph_type == 'division' or glyph_type == 'alteration':
                     strt_pos = None
-                elif glyph_type == "neume" or glyph_type == "custos" or glyph_type == "clef":
-
+                elif glyph_type != 'skip':
                     line_or_space, line_num = self._return_line_or_space_no(
                         g, center_of_mass, staff_locations, miyao_line)  # line (0) or space (1), no
                     strt_pos = self.strt_pos_find(g, line_or_space, line_num)
