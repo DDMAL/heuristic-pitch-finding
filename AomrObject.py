@@ -100,6 +100,10 @@ class AomrObject(object):
             'dimensions': self.image_size
         }
 
+    ####################
+    # Public Functions
+    ####################
+
     def run(self, page_glyphs, pitch_staff_technique=0):
         lg.debug("Running the finding code.")
 
@@ -155,6 +159,116 @@ class AomrObject(object):
             }
         }
 
+    #################
+    # Interpolation
+    #################
+
+    def _close_enough(self, y1, y2):
+        val = 0.005     # y1 and y2 are within val% of each other
+        valPix = 5      # best between 0 and 10
+
+        # return (y1 > y2 * (1 - val) and y1 < y2 * (1 + val))      # proportional distance
+        # return (y1 > y2 - valPix and y1 < y2 + valPix)            # linear distance
+        return y1 == y2                                           # exact comparison
+
+    def _find_left_pt(self, points, pos):
+        if pos == 0:
+            return False
+        else:
+            return pos - 1
+
+    def _find_right_pt(self, points, pos):
+        return next((i + pos + 1 for i, x in enumerate(points[pos + 1:]) if x[0]), False)
+
+    def _generate_ref_line(self, staff):
+        refLine = []
+
+        for line in staff['line_positions']:
+            for pt in line:
+                pt = (pt[0], 0)     # remove all y values
+                add = True
+
+                if not refLine:
+                    refLine.append(pt)
+                    add = False         # initial point doesn't work the same way
+
+                if refLine:
+                    for l, rpt in enumerate(refLine):
+                        if self._close_enough(rpt[0], pt[0]):
+                            add = False
+                            break
+
+                if add:
+                    inserted = False
+                    for l, rpt in enumerate(refLine):
+                        if pt[0] < rpt[0]:
+                            refLine.insert(l, pt)
+                            inserted = True
+                            break
+
+                    if not inserted:
+                        refLine.append(pt)
+
+        return refLine
+
+    def _interpolate_staff_locations(self, staff_locations):
+        for i, staff in enumerate(staff_locations):
+
+            refLine = self._generate_ref_line(staff)
+
+            # interpolation based on refLine
+            newSet = []
+            for j, line in enumerate(staff['line_positions']):  # for each line
+                newLine = [(False, False)] * len(refLine)  # generate line of false points with set length
+
+                # put old values in correct spots
+                nudge = 0
+                for k, pt in enumerate(refLine):
+                    # print k, '-', nudge, '=', k - nudge       # debug interpolating
+                    if k - nudge < len(line) and self._close_enough(line[k - nudge][0], pt[0]):
+                        newLine[k] = line[k - nudge]
+                    else:
+                        nudge += 1
+
+                # for all missing points, interpolate
+                for k, pt in enumerate(newLine):
+                    if not pt[0]:
+
+                        left = self._find_left_pt(newLine, k)
+                        right = self._find_right_pt(newLine, k)
+
+                        if not left:  # flat left
+                            newLine[k] = refLine[k][0], newLine[right][1]
+
+                        elif not right:  # flat right
+                            newLine[k] = refLine[k][0], newLine[left][1]
+
+                        else:
+                            for l in range(k + 1, len(newLine)):
+                                if newLine[l][0]:
+                                    lowerY = newLine[k - 1][1]
+                                    upperY = newLine[l][1]
+                                    difY = upperY - lowerY
+                                    den = l - k + 1.0
+
+                                    for m in range(l - k):
+                                        num = m + 1
+                                        calc = lowerY + (difY * (num / den))
+                                        newLine[k + m] = (refLine[k + m][0], int(calc))
+                                    break
+
+                newSet.append(newLine)
+                # print '\n', "oldLine", len(line), line, '\n'
+                # print "refLine", len(refLine), refLine, '\n'
+                # print "newLine", len(newLine), newLine, '\n'
+
+            staff_locations[i]['line_positions'] = newSet
+        return staff_locations
+
+    #################
+    # Staff Finding
+    #################
+
     def find_staves(self):
         if self.sfnd_algorithm is 0:
             s = musicstaves.StaffFinder_miyao(self.image)
@@ -165,6 +279,9 @@ class AomrObject(object):
         else:
             raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
+        return self.find_staff_locations(s)
+
+    def find_staff_locations(self, s):
         scanlines = 20
         blackness = 0.8
         tolerance = -1
@@ -311,88 +428,8 @@ class AomrObject(object):
         # ptsLen = [len(n) for n in all_line_positions]
         # numPtsMode = max(ptsLen, key = ptsLen.count)     # find most common number of points per line
 
-        self.staff_locations = all_line_positions
-        self.interpolate_staff_locations()
+        self.staff_locations = self._interpolate_staff_locations(all_line_positions)
         return all_line_positions
-
-    def close_enough(self, y1, y2):
-        val = 0.005   # y1 and y2 are within val% of each other
-        valPix = 3      # if crashing, try between 2 and 5
-
-        # return (y1 > y2 * (1 - val) and y1 < y2 * (1 + val))      # proportional distance
-        return (y1 > y2 - valPix and y1 < y2 + valPix)            # linear distance
-        # return y1 == y2                                           # exact comparison
-
-    def interpolate_staff_locations(self):
-
-        for i, staff in enumerate(self.staff_locations):
-
-            # generate a reference list to compare to
-            refLine = []
-            for line in staff['line_positions']:
-                for pt in line:
-                    add = True
-
-                    if not refLine:
-                        refLine.append(pt)
-                        add = False         # initial point doesn't work the same way
-
-                    if refLine:
-                        for l, rpt in enumerate(refLine):
-                            if self.close_enough(rpt[0], pt[0]):
-                                add = False
-
-                    if add:
-                        added = False
-                        for l, rpt in enumerate(refLine):
-                            if pt[0] < rpt[0]:
-                                refLine.insert(l, pt)
-                                added = True
-                                break
-
-                        if not added:
-                            refLine.append(pt)
-
-            # print '\n', i, '\n', refLine          # debug ref line
-
-            # interpolation based on refLine
-            newSet = []
-            for j, line in enumerate(staff['line_positions']):  # for each line
-                # generate line of false points with set length
-                newLine = [(False, False)] * len(refLine)
-
-                # put old values in correct spots
-                nudge = 0
-                # print line
-                for k, pt in enumerate(refLine):
-                    # print k, '-', nudge, '=', k - nudge       # debug interpolating
-                    if k - nudge < len(line) and self.close_enough(line[k - nudge][0], pt[0]):
-                        newLine[k] = line[k - nudge]
-                    else:
-                        nudge += 1
-
-                # for all STILL false points, interpolate
-                for k, pt in enumerate(newLine):
-                    if not pt[0]:
-                        for l in range(k + 1, len(newLine)):
-                            if newLine[l][0]:
-                                lowerY = newLine[k - 1][1]
-                                upperY = newLine[l][1]
-                                difY = upperY - lowerY
-                                den = l - k + 1.0
-
-                                for m in range(l - k):
-                                    num = m + 1
-                                    calc = lowerY + (difY * (num / den))
-                                    newLine[k + m] = (refLine[k + m][0], int(calc))
-                                break
-
-                newSet.append(newLine)
-                print "oldLine", len(line), line
-                print "refLine", len(refLine), refLine
-                print "newLine", len(newLine), newLine, '\n'
-
-            self.staff_locations[i]['line_positions'] = newSet
 
     def staff_coords(self):
         """
@@ -426,6 +463,10 @@ class AomrObject(object):
         num_stafflines = self.page_result['staves'][0]['num_lines']
         musicstaves_no_staves.remove_staves(u'all', num_stafflines)
         self.img_no_st = musicstaves_no_staves.image
+
+    #################
+    # Pitch Finding
+    #################
 
     def avg_lines_pitch_finder(self, glyphs):
         """ Pitch Find.
@@ -778,7 +819,10 @@ class AomrObject(object):
                                    "X-{0}".format(g), RGBPixel(255, 0, 0), 12, 0, False, False, 0)
                 o = glyph.splitx(0.2)  # should be in 10mm instead of percentage
 
-    # private
+    #####################
+    # Private Functions
+    #####################
+
     def _m10(self, pixels):
         """
             Converts the number of pixels to the number of 10ths of a MM.
@@ -962,6 +1006,7 @@ if __name__ == "__main__":
 
     aomr_obj = AomrObject(image, **kwargs)
     staves = aomr_obj.find_staves()                # returns true!
+    # print staves
     aomr_obj.staff_coords()
     sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want
 
