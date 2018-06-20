@@ -128,7 +128,7 @@ class AomrObject(object):
                 glyph_form = glyph_id.split(".")[1:]
                 # lg.debug("sg[1]:{0} s:{1} sg{2}".format(sg[1], s+1, sg))
                 # structure: g, stave, g.offset_x, note, strt_pos
-                if staff == s+1:
+                if staff == s + 1:
                     j_glyph = {'type': glyph_type,
                                'form': glyph_form,
                                'coord': [glyph.offset_x, glyph.offset_y, glyph.offset_x + glyph.ncols, glyph.offset_y + glyph.nrows],
@@ -142,6 +142,18 @@ class AomrObject(object):
         # print data
         lg.debug("6. Returning the data. Done running for this pag.")
         return data
+
+    def get_page_properties(self):
+        return {
+            # 'filename': self.filename,
+            'resolution': self.image_resolution,
+            'bounding_box': {
+                'ncols': self.image.ncols,
+                'nrows': self.image.nrows,
+                'ulx': 0,
+                'uly': 0,
+            }
+        }
 
     def find_staves(self):
         if self.sfnd_algorithm is 0:
@@ -274,15 +286,15 @@ class AomrObject(object):
             avg_lines = []
             for l, line in enumerate(av_lines[i]):
                 avg_lines.append(line.average_y)
-            diff_up = avg_lines[1]-avg_lines[0]
-            diff_lo = avg_lines[3]-avg_lines[2]
+            diff_up = avg_lines[1] - avg_lines[0]
+            diff_lo = avg_lines[3] - avg_lines[2]
             avg_lines.insert(0, avg_lines[0] - 2 * diff_up)
             avg_lines.insert(1, avg_lines[1] - diff_up)
             avg_lines.append(avg_lines[5] + diff_lo)
             avg_lines.append(avg_lines[5] + 2 * diff_lo)  # not using the 8th line
 
             self.page_result['staves'][i] = {
-                'staff_no': i+1,
+                'staff_no': i + 1,
                 'coords': [ulx, uly, lrx, lry],
                 'num_lines': len(staff),
                 'line_positions': line_positions,
@@ -305,10 +317,11 @@ class AomrObject(object):
 
     def close_enough(self, y1, y2):
         val = 0.005   # y1 and y2 are within val% of each other
-        valPix = 5
+        valPix = 3      # if crashing, try between 2 and 5
 
         # return (y1 > y2 * (1 - val) and y1 < y2 * (1 + val))      # proportional distance
-        return (y1 > y2 - valPix and y1 < y2 + valPix)              # linear distance
+        return (y1 > y2 - valPix and y1 < y2 + valPix)            # linear distance
+        # return y1 == y2                                           # exact comparison
 
     def interpolate_staff_locations(self):
 
@@ -340,6 +353,8 @@ class AomrObject(object):
                         if not added:
                             refLine.append(pt)
 
+            # print '\n', i, '\n', refLine          # debug ref line
+
             # interpolation based on refLine
             newSet = []
             for j, line in enumerate(staff['line_positions']):  # for each line
@@ -348,8 +363,10 @@ class AomrObject(object):
 
                 # put old values in correct spots
                 nudge = 0
+                # print line
                 for k, pt in enumerate(refLine):
-                    if self.close_enough(line[k - nudge][0], pt[0]):
+                    # print k, '-', nudge, '=', k - nudge       # debug interpolating
+                    if k - nudge < len(line) and self.close_enough(line[k - nudge][0], pt[0]):
                         newLine[k] = line[k - nudge]
                     else:
                         nudge += 1
@@ -371,9 +388,9 @@ class AomrObject(object):
                                 break
 
                 newSet.append(newLine)
-                # print "oldLine", len(line), line
-                # print "refLine", len(refLine), refLine
-                # print "newLine", len(newLine), newLine, '\n'
+                print "oldLine", len(line), line
+                print "refLine", len(refLine), refLine
+                print "newLine", len(newLine), newLine, '\n'
 
             self.staff_locations[i]['line_positions'] = newSet
 
@@ -515,14 +532,14 @@ class AomrObject(object):
             Returns the start position, starting from ledger line 0, which strt_pos value is 0.
 
         """
-        strt_pos = (line_num + 1)*2 + line_or_space
+        strt_pos = (line_num + 1) * 2 + line_or_space
         return strt_pos
 
     def find_octave(self, clef, clef_line, my_strt_pos):
         clef_type = clef.split(".")[-1]  # "f" or "c"
         dividing_line = clef_line
         octv = 0
-        actual_line = 10 - (2*(clef_line-1))
+        actual_line = 10 - (2 * (clef_line - 1))
 
         if clef_type == "c":
             if my_strt_pos <= actual_line:
@@ -621,7 +638,7 @@ class AomrObject(object):
         for i, s in enumerate(self.staff_coordinates):
             staff_number = i + 1
             # GVM: considering the ledger lines in an unorthodox way.
-            if 0.5*(3 * s[1] - s[3]) <= g.offset_y + center_of_mass < 0.5*(3 * s[3] - s[1]):
+            if 0.5 * (3 * s[1] - s[3]) <= g.offset_y + center_of_mass < 0.5 * (3 * s[3] - s[1]):
                 staff_location = self.staff_locations[i]['line_positions']
                 return staff_location, staff_number
 
@@ -651,17 +668,19 @@ class AomrObject(object):
         # horiz_diff = number of pixels between two points.
         # 848 - 771  = 77
 
-        horz_diff = float(st[0][miyao_line][0] - st[0][miyao_line-1][0])
+        # print(glyph, center_of_mass, miyao_line)  # glyph attributes
+        # print(st)                                 # staff lines
+        horz_diff = float(st[0][miyao_line][0] - st[0][miyao_line - 1][0])
 
         for i, stf in enumerate(st[1:]):
 
             # -1
             # y_pos difference with the upper miyao line
-            vert_diff_up = float(stf[miyao_line][1] - stf[miyao_line-1][1])
+            vert_diff_up = float(stf[miyao_line][1] - stf[miyao_line - 1][1])
 
             # 0
             # y_pos difference with the lower miyao line
-            vert_diff_lo = float(stf[miyao_line+1][1] - stf[miyao_line][1])
+            vert_diff_lo = float(stf[miyao_line + 1][1] - stf[miyao_line][1])
 
             # -1 / 77
             factor_up = vert_diff_up / horz_diff
@@ -672,7 +691,7 @@ class AomrObject(object):
             # g.x = 790
             # 790 - 771 = 19
             # difference between the glyph x_pos and the previous bar
-            diff_x_glyph_bar = float(glyph.offset_x - stf[miyao_line-1][0])
+            diff_x_glyph_bar = float(glyph.offset_x - stf[miyao_line - 1][0])
 
             # (-1/77) * 19 = -0.2
             # vert_pos_shift is the shifted vertical position of each line for each x position
@@ -683,20 +702,20 @@ class AomrObject(object):
             vert_pos_shift_lo = factor_lo * diff_x_glyph_bar
 
             # (848 + 0) - (771 + -0.2)
-            diff = (stf[miyao_line][1] + vert_pos_shift_lo) - (st[i][miyao_line-1][1] + vert_pos_shift_up)
+            diff = (stf[miyao_line][1] + vert_pos_shift_lo) - (st[i][miyao_line - 1][1] + vert_pos_shift_up)
 
             # 848 + 6 * (6 * 77.2)/16 >
-            if stf[miyao_line][1] + 6*diff/16 > glyph.offset_y + center_of_mass:
+            if stf[miyao_line][1] + 6 * diff / 16 > glyph.offset_y + center_of_mass:
                 line_or_space = 0
                 return line_or_space, i
 
-            elif stf[miyao_line][1] + 13*diff/16 > glyph.offset_y + center_of_mass:
+            elif stf[miyao_line][1] + 13 * diff / 16 > glyph.offset_y + center_of_mass:
                 line_or_space = 1
                 return line_or_space, i
 
-            elif stf[miyao_line][1] + 4*diff/4 > glyph.offset_y + center_of_mass:
+            elif stf[miyao_line][1] + 4 * diff / 4 > glyph.offset_y + center_of_mass:
                 line_or_space = 0
-                return line_or_space, i+1
+                return line_or_space, i + 1
             else:
                 pass
 
@@ -859,10 +878,10 @@ class AomrObject(object):
         for s, staff in enumerate(self.staff_locations):
             for l, line in enumerate(staff['avg_lines'][1:]):
                 diff = (0.5 * (line - staff['avg_lines'][l]))
-                if math.floor(line-diff/2) <= y <= math.ceil(line+diff/2):  # Is the glyph on a line ?
+                if math.floor(line - diff / 2) <= y <= math.ceil(line + diff / 2):  # Is the glyph on a line ?
                     glyph_array.append([0, s, l])
                     return glyph_array
-                elif math.floor(line+diff/2) <= y <= math.ceil(line+3*diff/2):  # Is the glyph on a space ?
+                elif math.floor(line + diff / 2) <= y <= math.ceil(line + 3 * diff / 2):  # Is the glyph on a space ?
                     glyph_array.append([1, s, l])
                     return glyph_array
                 else:
@@ -880,6 +899,7 @@ class AomrObject(object):
         glyph_type = glyph_var[0]
         check_additions = False
 
+        # print(glyph_var)      # glyph name
         if not self.extended_processing:
             return self.x_projection_vector(g)
         else:
@@ -946,10 +966,14 @@ if __name__ == "__main__":
     sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want
 
     output_json = {
+        'page': [],
         'staves': [],
         'glyphs': [],
     }
     pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
+
+    # get page information
+    output_json['page'] = aomr_obj.get_page_properties()
 
     # get staves information
     for i, s in enumerate(staves):
