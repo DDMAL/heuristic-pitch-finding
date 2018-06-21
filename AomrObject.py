@@ -54,6 +54,7 @@ class AomrObject(object):
         self.staves = None
 
         self.staff_locations = None
+        self.interpolated_staff_locations = None
         self.staff_coordinates = None
 
         # a global to keep track of the number of stafflines.
@@ -159,6 +160,9 @@ class AomrObject(object):
             }
         }
 
+    def get_staves(self):
+        return [self.staff_locations, self.interpolated_staff_locations]
+
     #################
     # Interpolation
     #################
@@ -212,7 +216,8 @@ class AomrObject(object):
         return refLine
 
     def _interpolate_staff_locations(self, staff_locations):
-        for i, staff in enumerate(staff_locations):
+        interpolated_staff_locations = copy.deepcopy(staff_locations)
+        for i, staff in enumerate(interpolated_staff_locations):
 
             refLine = self._generate_ref_line(staff)
 
@@ -262,8 +267,8 @@ class AomrObject(object):
                 # print "refLine", len(refLine), refLine, '\n'
                 # print "newLine", len(newLine), newLine, '\n'
 
-            staff_locations[i]['line_positions'] = newSet
-        return staff_locations
+            interpolated_staff_locations[i]['line_positions'] = newSet
+        return interpolated_staff_locations
 
     #################
     # Staff Finding
@@ -279,9 +284,9 @@ class AomrObject(object):
         else:
             raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
-        return self.find_staff_locations(s)
+        return self._find_staff_locations(s)
 
-    def find_staff_locations(self, s):
+    def _find_staff_locations(self, s):
         scanlines = 20
         blackness = 0.8
         tolerance = -1
@@ -428,8 +433,9 @@ class AomrObject(object):
         # ptsLen = [len(n) for n in all_line_positions]
         # numPtsMode = max(ptsLen, key = ptsLen.count)     # find most common number of points per line
 
-        self.staff_locations = self._interpolate_staff_locations(all_line_positions)
-        return all_line_positions
+        self.staff_locations = all_line_positions
+        self.interpolated_staff_locations = self._interpolate_staff_locations(self.staff_locations)
+        return self.staff_locations
 
     def staff_coords(self):
         """
@@ -505,7 +511,7 @@ class AomrObject(object):
         """
         proc_glyphs = []
         st_bound_coords = self.staff_coordinates
-        st_full_coords = self.staff_locations
+        st_full_coords = self.interpolated_staff_locations
 
         # what to do if there are no punctum on a page???
         av_punctum = self.average_punctum(glyphs)
@@ -680,7 +686,7 @@ class AomrObject(object):
             staff_number = i + 1
             # GVM: considering the ledger lines in an unorthodox way.
             if 0.5 * (3 * s[1] - s[3]) <= g.offset_y + center_of_mass < 0.5 * (3 * s[3] - s[1]):
-                staff_location = self.staff_locations[i]['line_positions']
+                staff_location = self.interpolated_staff_locations[i]['line_positions']
                 return staff_location, staff_number
 
     def _return_vertical_line(self, g, st):
@@ -919,7 +925,7 @@ class AomrObject(object):
         """
         glyph_array = []
         y = round(g.offset_y + center_of_mass)  # y is the y_position of the center of mass of a glyph
-        for s, staff in enumerate(self.staff_locations):
+        for s, staff in enumerate(self.interpolated_staff_locations):
             for l, line in enumerate(staff['avg_lines'][1:]):
                 diff = (0.5 * (line - staff['avg_lines'][l]))
                 if math.floor(line - diff / 2) <= y <= math.ceil(line + diff / 2):  # Is the glyph on a line ?
