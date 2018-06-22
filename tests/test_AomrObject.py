@@ -20,9 +20,16 @@ class T(unittest.TestCase):
 
     aomr_obj = None
 
-    # unit tests
+    ###########
+    # General
+    ###########
+
     def test_a01_generate_aomr_obj(self):
         T.aomr_obj = AomrObject(self.image, **self.kwargs)
+        assert True
+
+    def test_a02_get_page_properties(self):
+        T.page_props = T.aomr_obj.get_page_properties()
         assert True
 
     #################
@@ -40,8 +47,18 @@ class T(unittest.TestCase):
             for j, line in enumerate(staff['line_positions']):
                 for k, pt in enumerate(line[1:]):
                     if not pt[0] > line[k][0]:
-                        print(pt, line[k])
+                        # points out of order
                         assert False
+
+        assert True
+
+    def test_b03_staves_within_page(self):
+
+        for i, staff in enumerate(T.staves):
+            if staff['coords'][2] > T.page_props['bounding_box']['ncols'] \
+                    or staff['coords'][3] > T.page_props['bounding_box']['nrows']:
+                # staff outside of page boundaries
+                assert False
 
         assert True
 
@@ -54,10 +71,8 @@ class T(unittest.TestCase):
         for i, staff in enumerate(T.staves):
             for j, line in enumerate(staff['line_positions']):
                 for pt in line:
-
-                    # all original points remain in interpolated line
                     if pt not in T.interpolated_staves[i]['line_positions'][j]:
-                        print(pt)
+                        # point does not remain in interpolated line
                         assert False
         assert True
 
@@ -66,9 +81,8 @@ class T(unittest.TestCase):
         for i, staff in enumerate(T.interpolated_staves):
             for j, line in enumerate(staff['line_positions']):
                 for pt in line:
-
-                    # no missing points
                     if not pt[0] or not pt[1]:
+                        # missing points
                         assert False
 
         assert True
