@@ -32,8 +32,13 @@ class AomrObject(object):
         """
             Constructs and returns an AOMR object
         """
-        self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a', 'g', 'f',
-                      'e', 'd', 'c', 'b', 'a', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
+        # self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a', 'g', 'f',
+        #               'e', 'd', 'c', 'b', 'a', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
+        # self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a']
+        self.SCALE = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
+
+        self.clef = 'c', 3
+
         self.filename = image
         self.extended_processing = True
 
@@ -582,101 +587,50 @@ class AomrObject(object):
         strt_pos = (line_num + 1) * 2 + line_or_space
         return strt_pos
 
-    def find_octave(self, clef, clef_line, my_strt_pos):
-        clef_type = clef.split(".")[-1]  # "f" or "c"
-        dividing_line = clef_line
-        octv = 0
-        actual_line = 10 - (2 * (clef_line - 1))
-
-        if clef_type == "c":
-            if my_strt_pos <= actual_line:
-                octv = 4
-            elif my_strt_pos > actual_line + 7:
-                octv = 2
-            else:
-                octv = 3
-        elif clef_type == "f":
-            if (actual_line + 3) >= my_strt_pos > (actual_line - 3):
-                octv = 3
-            elif my_strt_pos < (actual_line - 3):
-                octv = 4
-            elif my_strt_pos > (actual_line + 3):
-                octv = 2
-        return octv
-
     def sort_glyphs(self, proc_glyphs):
-        """
-            Sorts the glyphs by its place in the page (up-bottom, left-right) and appends the proper note
-            according to the clef at the beginning of each stave
-        """
-        sorted_glyphs = sorted(proc_glyphs, key=itemgetter(1, 2))
 
-        # declare this, otherwise it might be undefined if a clef isn't the first
-        # thing on the line. It's probably incorrect, but it's better than
-        # exploding.
-        shift = 0
-        my_clef = None
-        my_clef_line = None
+        # Sorts the glyphs by its place in the page (up-bottom, left-right) and appends
+        # the proper note according to the clef at the beginning of each stave
+        sorted_glyphs = sorted(proc_glyphs, key=itemgetter(1, 2))
 
         def __glyph_type(g):
             return g[0].get_main_id().split(".")[0]
 
         for i, glyph_array in enumerate(sorted_glyphs):
             gtype = __glyph_type(glyph_array)
+
             if gtype == 'clef':
-                # my_clef = this_glyph_id
-                #
-                # my_clef_line = copy.deepcopy(glyph_array[3])
-                # clef shift ensures we use the real lines, not the imaginary ones.
-                shift = self.clef_shift(glyph_array)
-                # array 3 is the glyph_strt_pos
-                glyph_array[3] = 6 - glyph_array[3] / 2
+
+                # overwrite last defined clef
+                self.clef = glyph_array[0].get_main_id().split('.')[1], glyph_array[3]
+
+                glyph_array[3] = 6 - glyph_array[3] / 2  # get clef line excluding spaces
                 glyph_array.extend([None, None, None, None])
+
             elif gtype == "neume" or gtype == "custos":
-                pitch = self.SCALE[glyph_array[3] - shift]
+                clef, clef_line = self.clef
+                my_strt_pos = glyph_array[3]
 
-                # find the nearest prior clef.
-                revglyphs = reversed(sorted_glyphs[0:i])
-                for gl in revglyphs:
-                    if __glyph_type(gl) == "clef":
-                        my_clef = gl[0].get_main_id()
-                        my_clef_line = copy.deepcopy(gl[3])
-                        break
+                # rotate scale based on clef
+                rot = self.SCALE.index(clef)
+                SCALE = self.SCALE[rot:] + self.SCALE[:rot]
 
-                if my_clef is None:
-                    lg.debug("My clef is None! setting default c clef for {0}".format(glyph_array))
-                    my_clef = "clef.c"
-                if my_clef_line is None:
-                    lg.debug("My clef_line is None! setting default of line 3 for {0}".format(glyph_array))
-                    my_clef_line = 3
+                # find note
+                note = SCALE[int((clef_line - my_strt_pos) % len(SCALE))]
 
-                octave = self.find_octave(my_clef, my_clef_line, glyph_array[3])
-                glyph_array.extend([pitch, octave, my_clef_line, my_clef])
-            else:
-                # pdb.set_trace()
+                # find octave
+                if my_strt_pos <= clef_line:
+                    octave = 3 + int((clef_line - my_strt_pos) / len(SCALE))
+                elif my_strt_pos > clef_line:
+                    octave = 3 - int((len(SCALE) - clef_line + my_strt_pos - 1) / len(SCALE))
+
+                glyph_array.extend([note, octave, clef_line, 'clef.' + clef])
+                print(glyph_array[1:])
+
+            else:   # no pitch info necessary
                 glyph_array.extend([None, None, None, None])
 
         return sorted_glyphs
-
-    def clef_shift(self, glyph_array):
-        """ Clef Shift.
-            This methods shifts the note names depending on the staff clef
-        """
-        this_clef = glyph_array[0]
-        this_clef_id = this_clef.get_main_id()
-        try:
-            this_clef_type = this_clef_id.split(".")[1]
-        except IndexError:
-            # in case we've got an error.
-            this_clef_type = "c"
-
-        shift = 0
-        if this_clef_type == 'c':
-            shift = glyph_array[3] - 4
-            return shift
-        elif this_clef_type == 'f':
-            shift = glyph_array[3] - 1
-            return shift
 
     def _return_staff_no(self, g, center_of_mass):
         """
@@ -706,8 +660,23 @@ class AomrObject(object):
             Returns the line or space number where the glyph is located for a specific stave an miyao line.
 
             Remember kids :)
-                Line = 0
-                Space = 1
+
+            0               ----                        ledger 2
+            1
+            2       ----                                ledger 1
+            3
+            4   ---------------------------------       line 4
+            5
+            6   ---------------------------------       line 3
+            7
+            8   ---------------------------------       line 2
+            9
+            10  ---------------------------------       line 1
+            11 
+            12                  -----                   ledger -1
+            13
+            14                          -----           ledger -2
+            ...
 
         """
         # pdb.set_trace()
