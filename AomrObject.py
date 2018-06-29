@@ -662,72 +662,6 @@ class AomrObject(object):
             ......
 
         """
-        # pdb.set_trace()
-
-        # horiz_diff = number of pixels between two points.
-        # 848 - 771  = 77
-
-        # print(glyph, center_of_mass, miyao_line)  # glyph attributes
-        # print(staff)                                 # staff lines
-
-        # horz_diff = float(staff[0][miyao_line][0] - staff[0][miyao_line - 1][0])
-
-        # print(staff[0][miyao_line][0], staff[0][miyao_line - 1][0])
-        # for i, line in enumerate(staff[1:]):
-
-        #     # -1
-        #     # y_pos difference with the upper miyao line
-        #     vert_diff_up = float(line[miyao_line][1] - line[miyao_line - 1][1])
-
-        #     # 0
-        #     # y_pos difference with the lower miyao line
-        #     vert_diff_lo = float(line[miyao_line + 1][1] - line[miyao_line][1])
-
-        #     # -1 / 77
-        #     factor_up = vert_diff_up / horz_diff
-
-        #     # 0 / 77
-        #     factor_lo = vert_diff_lo / horz_diff
-
-        #     # g.x = 790
-        #     # 790 - 771 = 19
-        #     # difference between the glyph x_pos and the previous bar
-        #     diff_x_glyph_bar = float(glyph.offset_x - line[miyao_line - 1][0])
-
-        #     # (-1/77) * 19 = -0.2
-        #     # vert_pos_shift is the shifted vertical position of each line for each x position
-        #     vert_pos_shift_up = factor_up * diff_x_glyph_bar
-
-        #     # 0
-        #     # vert_pos_shift is the shifted vertical position of each line for each x position
-        #     vert_pos_shift_lo = factor_lo * diff_x_glyph_bar
-
-        #     # (848 + 0) - (771 + -0.2)
-        #     diff = (line[miyao_line][1] + vert_pos_shift_lo) - (staff[i][miyao_line - 1][1] + vert_pos_shift_up)
-
-        #     print glyph.get_main_id(), (glyph.offset_x, int(glyph.offset_y + center_of_mass))
-
-        #     # 848 + 6 * (6 * 77.2)/16 >
-        #     if line[miyao_line][1] + 6 * diff / 16 > glyph.offset_y + center_of_mass:
-        #         line_or_space = 0
-        #         print 'line', i
-        #         return line_or_space, i
-
-        #     elif line[miyao_line][1] + 13 * diff / 16 > glyph.offset_y + center_of_mass:
-        #         line_or_space = 1
-        #         print 'space', i
-        #         return line_or_space, i
-
-        #     elif line[miyao_line][1] + 4 * diff / 4 > glyph.offset_y + center_of_mass:
-        #         line_or_space = 0
-        #         print 'line', i + 1
-        #         return line_or_space, i + 1
-        #     else:
-        #         pass
-
-        # print(staff[0][miyao_line][0], staff[0][miyao_line - 1][0])
-        # print(glyph.offset_x, int(glyph.offset_y + center_of_mass), miyao_line)
-
         # center_of_mass point to compare with staff lines
         ref_x = glyph.offset_x
         ref_y = int(glyph.offset_y + center_of_mass)
@@ -735,9 +669,7 @@ class AomrObject(object):
 
         # find left/right staffline position to compare against center_of_mass
         for i, point in enumerate(staff[0]):
-            # print point
             if point[0] > ref_x:
-                # print point[0], ref_x
                 if i == 0:
                     line_pos = [i]          # if before staff, use first line point
                 else:
@@ -745,21 +677,18 @@ class AomrObject(object):
                 break
             elif i == len(staff[0]) - 1:
                 line_pos = [i]              # if after staff, use last line point
-                print('last')
 
         print line_pos, (ref_x, ref_y)
+
         # find line below center_of_mass
-
-        # print staff
         for i, line in enumerate(staff[1:]):
-
             last_line = staff[i]
 
             # get points left & right of center_of_mass on this line and above
-            pb_left = line[line_pos[0]]
-            pb_right = line[line_pos[1]] if len(line_pos) == 2 else None
             pa_left = last_line[line_pos[0]]
+            pb_left = line[line_pos[0]]
             pa_right = last_line[line_pos[1]] if len(line_pos) == 2 else None
+            pb_right = line[line_pos[1]] if len(line_pos) == 2 else None
 
             # get line functions below and above glyph
             func_above = self._gen_line_func(pa_left, pa_right)
