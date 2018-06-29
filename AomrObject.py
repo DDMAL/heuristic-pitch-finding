@@ -35,11 +35,11 @@ class AomrObject(object):
         # self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a', 'g', 'f',
         #               'e', 'd', 'c', 'b', 'a', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
         # self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a']
-        self.SCALE = ['a', 'b', 'c', 'd', 'e', 'f', 'g']
+        self.SCALE = ['c', 'd', 'e', 'f', 'g', 'a', 'b']
 
         self.clef = 'c', 3
 
-        self.transpose = 1             # how many 2nds
+        self.transpose = 0             # how many 2nds
         self.space_proportion = 0.5    # glyph must be within middle xx% of the space between two lines for a space
 
         self.filename = image
@@ -555,7 +555,7 @@ class AomrObject(object):
 
     def _strt_pos_find(self, line_or_space, line_num):
         # sets 0 as the 2nd ledger line above a staff
-        return (line_num + 1) * 2 + line_or_space - self.transpose
+        return (line_num + 1) * 2 + line_or_space - 1 - self.transpose
 
     def _sort_glyphs(self, proc_glyphs):
 
@@ -587,18 +587,19 @@ class AomrObject(object):
                 clef, clef_line = self.clef
                 my_strt_pos = glyph_array[3]
 
-                # rotate scale based on clef
-                rot = self.SCALE.index(clef)
-                SCALE = self.SCALE[rot:] + self.SCALE[:rot]
+                # get clef shifts
+                SCALE = self.SCALE
+                noteShift = SCALE.index(clef)
+                noteShiftAlt = (0 if noteShift == 0 else len(SCALE) - noteShift)
 
                 # find note
-                note = SCALE[int((clef_line - my_strt_pos) % len(SCALE))]
+                note = SCALE[int((clef_line - my_strt_pos - noteShift) % len(SCALE))]
 
                 # find octave
                 if my_strt_pos <= clef_line:
-                    octave = 3 + int((clef_line - my_strt_pos) / len(SCALE))
+                    octave = 3 + int((clef_line - my_strt_pos + noteShiftAlt) / len(SCALE))
                 elif my_strt_pos > clef_line:
-                    octave = 3 - int((len(SCALE) - clef_line + my_strt_pos - 1) / len(SCALE))
+                    octave = 3 - int((len(SCALE) - clef_line + my_strt_pos - 1 - noteShift) / len(SCALE))
 
                 glyph_array.extend([note, octave, clef_line, 'clef.' + clef])
 
