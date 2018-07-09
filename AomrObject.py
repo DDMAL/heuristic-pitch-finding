@@ -39,7 +39,7 @@ class AomrObject(object):
 
         self.clef = 'c', 3
 
-        self.transpose = 0             # how many 2nds
+        self.transpose = 0             # shift all notes by how many 2nds?
         self.space_proportion = 0.5    # glyph must be within middle xx% of the space between two lines for a space
 
         self.filename = image
@@ -169,6 +169,24 @@ class AomrObject(object):
 
     def get_staves(self):
         return [self.staff_locations, self.interpolated_staff_locations]
+
+    def get_staves_properties(self):
+        num_staves = len(self.interpolated_staff_locations)
+
+        staves = []
+        for st in self.interpolated_staff_locations:
+            staff = {
+                'coords': st['coords'],
+                'num_lines': st['num_lines'],
+                'staff_no': st['staff_no'],
+            }
+
+            staves.append(staff)
+
+        return {
+            'num_staves': num_staves,
+            'staves': staves,
+        }
 
     #################
     # Interpolation
@@ -495,50 +513,37 @@ class AomrObject(object):
         self.avg_punctum = self._average_punctum(glyphs)
         av_punctum = self.avg_punctum
         for g in glyphs:
+            print '\n\nglyph'
             g_cc = None
             sub_glyph_center_of_mass = None
             glyph_id = g.get_main_id()
             glyph_var = glyph_id.split('.')
             glyph_type = glyph_var[0]
 
+            # find glyph's center_of_mass
             if glyph_type == 'neume':
                 center_of_mass = self._process_neume(g)
             else:
                 center_of_mass = self._x_projection_vector(g)
 
-            if glyph_type == '_group':
-                continue
-                # strt_pos = None
-                # st_no = None
-                # center_of_mass = 0
+            # find staff for current glyph
+            stinfo = self._find_staff_no(g, center_of_mass)
+            if stinfo != None:
+                staff_locations, staff_number = stinfo
 
+            # based on glyph type, find staff positionor don't
+            no_pitch_glyphs = ['alteration', 'division', 'skip']
+            if glyph_type not in no_pitch_glyphs:
+                # print g, '\n', center_of_mass, '\n', staff_locations
+                line_or_space, line_num = self._return_line_or_space_no(g, center_of_mass, staff_locations)
+                strt_pos = self._strt_pos_find(line_or_space, line_num)
             else:
-                stinfo = self._return_staff_no(g, center_of_mass)
-                if stinfo is None:
-                    continue
-                else:
-                    staff_locations, staff_number = stinfo
-
-                miyao_line = self._return_vertical_line(g, staff_locations[0])
-                # print(miyao_line)
-                if glyph_type == 'division' or glyph_type == 'alteration':
-                    strt_pos = None
-                elif glyph_type != 'skip':
-                    line_or_space, line_num = self._return_line_or_space_no(
-                        g, center_of_mass, staff_locations, miyao_line)  # line (0) or space (1), no
-                    strt_pos = self._strt_pos_find(line_or_space, line_num)
-                    lg.debug("glyph_id: {0}, glyph: {1}".format(glyph_id, g))
-                    lg.debug("\nst[0]: {0}\nmiyao line: {1}".format(staff_locations[0], miyao_line))
-                    lg.debug("line (0) or space(1): {0}, number: {1}, Start Position: {2}".format(
-                        line_or_space, line_num, strt_pos))
-                else:
-                    strt_pos = None
-                    staff_number = None
+                strt_pos = None
+                staff_number = None
 
             proc_glyphs.append([g, staff_number, g.offset_x, strt_pos])
 
         sorted_glyphs = self._sort_glyphs(proc_glyphs)
-        lg.debug('SG:{0}'.format(sorted_glyphs))
         return sorted_glyphs
 
     # def biggest_cc(self, g_cc):
@@ -567,11 +572,6 @@ class AomrObject(object):
         sorted_glyphs = sorted(proc_glyphs, key=itemgetter(1, 2))
 
         for i, glyph_array in enumerate(sorted_glyphs):
-
-            # if i == 0 or glyph_array[1] != sorted_glyphs[i - 1][1]:
-            #     print('\n\n')
-            #     j = -1
-            # j += 1
 
             gtype = __glyph_type(glyph_array)
 
@@ -603,26 +603,105 @@ class AomrObject(object):
 
                 glyph_array.extend([note, octave, clef_line, 'clef.' + clef])
 
-                # if glyph_array[1] == 8 and (j == 5 or j == 6):
-                #     print(j, glyph_array[1:])
-
             else:   # no pitch info necessary
                 glyph_array.extend([None, None, None, None])
 
         return sorted_glyphs
 
-    def _return_staff_no(self, g, center_of_mass):
-        # Returns the staff and staff number where a specific glyph is located
-        print '\n'
-        for i, s in enumerate(self.staff_coordinates):
-            staff_number = i + 1
+    def _find_staff_no(self, g, center_of_mass):
+        # # Find which staff a glyph is a part of
+        # for i, s in enumerate(self.staff_coordinates):
+        #     staff_number = i + 1
 
-            # print g.get_main_id(), staff_number, s, '       \t', g.offset_x, g.offset_y, '~=', int(center_of_mass + g.offset_y)
+        #     # print g.get_main_id(), staff_number, s, '       \t', g.offset_x, g.offset_y, '~=', int(center_of_mass + g.offset_y)
 
-            # GVM: considering the ledger lines in an unorthodox way.
-            if 0.5 * (3 * s[1] - s[3]) <= g.offset_y + center_of_mass < 0.5 * (3 * s[3] - s[1]):
-                staff_location = self.interpolated_staff_locations[i]['line_positions']
-                return staff_location, staff_number
+        #     # GVM: considering the ledger lines in an unorthodox way.
+        #     if 0.5 * (3 * s[1] - s[3]) <= g.offset_y + center_of_mass < 0.5 * (3 * s[3] - s[1]):
+        #         staff_location = self.interpolated_staff_locations[i]['line_positions']
+        #         return staff_location, staff_number
+
+        # print '\n'
+
+        # if a glyph intersects with a staff, it is within that staff
+        intersecting_staves = []
+        for i, st in enumerate(self.interpolated_staff_locations):
+            glyph_coords = [g.offset_x, g.offset_y, g.offset_x + g.ncols, g.offset_y + g.nrows]
+            staff_coords = st['coords']
+
+            if self._intersecting_coords(glyph_coords, staff_coords):
+                intersecting_staves.append(st)
+
+        if len(intersecting_staves) > 0:
+            print('found intersecting staff', intersecting_staves[0]['staff_no'])
+            return intersecting_staves[0]['line_positions'], intersecting_staves[0]['staff_no']
+        else:
+            return self._find_closest_staff_no(g, center_of_mass, self.interpolated_staff_locations)
+
+    def _intersecting_coords(self, coord1, coord2):
+        # do these two rectangles intersect
+        return not (coord2[0] > coord1[2] or
+                    coord2[2] < coord1[0] or
+                    coord2[1] > coord1[3] or
+                    coord2[3] < coord1[1])
+
+    def _find_closest_staff_no(self, g, center_of_mass, staves):
+        com_point = (g.offset_x, g.offset_y + center_of_mass)
+
+        closest = None
+        for i, st in enumerate(staves):
+
+            # print i, '/', len(staves) - 1
+
+            # define corner points
+            ul = (st['coords'][0], st['coords'][1])
+            ur = (st['coords'][2], st['coords'][1])
+            ll = (st['coords'][0], st['coords'][3])
+            lr = (st['coords'][2], st['coords'][3])
+
+            d1 = self._find_distance_between_line_and_point(ul, ur, com_point)
+            d2 = self._find_distance_between_line_and_point(ur, lr, com_point)
+            d3 = self._find_distance_between_line_and_point(lr, ll, com_point)
+            d4 = self._find_distance_between_line_and_point(ll, ul, com_point)
+            distances = [d1, d2, d3, d4]
+
+            if closest == None or closest[0] > min(distances):
+                closest = (min(distances), st['line_positions'], st['staff_no'])
+                # print closest[0], i
+
+        print('found closest staff', closest[2])
+        # print(closest)
+        return closest[1:]
+
+    def _find_distance_between_line_and_point(self, p1, p2, p3):
+        # finds minimum distance between a point and a line segment
+        # line MUST be either perfectly vertical or perfectly horizontal
+
+        x1, y1 = p1  # line start
+        x2, y2 = p2  # line end
+        x3, y3 = p3  # comparison point
+
+        line_type = ('vertical' if x1 == x2 else 'horizontal')
+
+        if line_type is 'vertical':
+            perp = y3 < max([y1, y2]) and y3 > min([y1, y2])
+        elif line_type is 'horizontal':
+            perp = x3 < max([x1, x2]) and x3 > min([x1, x2])
+
+        # print(perp, line_type, p1, p2, p3)
+        if not perp:
+            s1 = self._find_distance_between_points(p3, p1)
+            s2 = self._find_distance_between_points(p3, p2)
+            return min([s1, s2])
+        elif line_type is 'vertical':
+            return abs(float(x3 - x1))
+        elif line_type is 'horizontal':
+            return abs(float(y3 - y1))
+
+    def _find_distance_between_points(self, p1, p2):
+        x1, y1 = p1
+        x2, y2 = p2
+
+        return (((x2 - x1) ** 2) + ((y2 - y1) ** 2)) ** 0.5
 
     def _return_vertical_line(self, g, st):
         """
@@ -636,7 +715,7 @@ class AomrObject(object):
         else:
             return j
 
-    def _return_line_or_space_no(self, glyph, center_of_mass, staff, miyao_line):
+    def _return_line_or_space_no(self, glyph, center_of_mass, staff):
         """
             Returns the line or space number where the glyph is located for a specific stave an miyao line.
 
@@ -645,21 +724,21 @@ class AomrObject(object):
             0 = space
             1 = line
 
-            0   0            ---------                     ledger 2
-                1
-            1   2            ---------                     ledger 1
-                3
-            2   4  ---------------------------------       line 4
-                5
-            3   6  ---------------------------------       line 3
-                7
-            4   8  ---------------------------------       line 2
-                9
-            5  10  ---------------------------------       line 1
-               11
-            6  12            ---------                     ledger -1
-               13
-            7  14            ---------                     ledger -2
+            0   0   0            ---------                     ledger 2
+            1       1
+            0   1   2            ---------                     ledger 1
+            1       3
+            0   2   4  ---------------------------------       line 4
+            1       5
+            0   3   6  ---------------------------------       line 3
+            1       7
+            0   4   8  ---------------------------------       line 2
+            1       9
+            0   5   10  ---------------------------------      line 1
+            1       11
+            0   6   12           ---------                     ledger -1
+            1       13
+            0   7   14           ---------                     ledger -2
             ......
 
         """
@@ -679,7 +758,7 @@ class AomrObject(object):
             elif i == len(staff[0]) - 1:
                 line_pos = [i]              # if after staff, use last line point
 
-        print line_pos, (ref_x, ref_y)
+        # print line_pos, (ref_x, ref_y)
 
         # find line below center_of_mass
         for i, line in enumerate(staff[1:]):
@@ -701,11 +780,9 @@ class AomrObject(object):
 
             # print pa_left, pa_right, ':', pb_left, pb_right
             # print i, y_above, y_below
-
             # print y_above, y_below
-            if y_below >= ref_y:
 
-                print 'found', i
+            if y_below >= ref_y:
 
                 y_dif = y_below - y_above
                 y_mid = y_above + y_dif / 2
@@ -715,22 +792,22 @@ class AomrObject(object):
 
                 # print '\n', ref_x, ref_y, line_pos, '\n'
 
-                print int(y_above), int(min(space)), int(max(space)), int(y_below)
+                # print int(y_above), int(min(space)), int(max(space)), int(y_below)
 
                 # upper line
                 if ref_y < min(space):
                     print 'line', i
-                    return 0, i  # - self.transpose
+                    return 0, i
 
                 # within space
                 elif ref_y >= min(space) and ref_y <= max(space):
                     print 'space', i
-                    return 1, i  # - self.transpose
+                    return 1, i
 
                 # lower line
                 elif ref_y > max(space):
                     print 'line', i + 1
-                    return 0, i + 1  # - self.transpose
+                    return 0, i + 1
 
     def _gen_line_func(self, point_left, point_right):
         # generates a line function based on two points,
@@ -860,6 +937,7 @@ if __name__ == "__main__":
 
     aomr_obj = AomrObject(image, **kwargs)
     staves = aomr_obj.find_staves()                # returns true!
+    # print aomr_obj.get_staves_properties()
     # print staves
     aomr_obj.staff_coords()
     sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want

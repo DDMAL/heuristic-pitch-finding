@@ -112,3 +112,46 @@ class T(unittest.TestCase):
                             assert False
 
         assert True
+
+    ######################
+    # Find Closest Staff
+    ######################
+
+    def test_d01_find_distance_between_points(self):
+
+        points = [[(0, 0), (10, 10)],
+                  [(2, 2), (6, 6)],
+                  [(10, 7), (5, 8)],
+                  [(400, 73), (23, 900)]]
+
+        distances = [200, 32, 26, 826058]
+
+        for i, (p1, p2) in enumerate(points):
+            assert T.aomr_obj._find_distance_between_points(p1, p2) == distances[i] ** 0.5
+
+    def test_d02_find_distance_between_line_and_point(self):
+
+        lines = [[(0, 10), (5, 10)],
+                 [(1000, 4500), (2500, 4500)],
+                 [(2000, 2500), (1000, 2500)],
+                 [(1600, 2000), (1600, 3000)]]
+
+        points = [(0, 0),
+                  (10, 10),
+                  (400, 400),
+                  (1600, 1600),
+                  (3200, 3200),
+                  (6400, 6400)]
+
+        distances = [[10.000, 5.000, 555.090, 2252.137, 4514.878, 9040.360],
+                     [4609.772, 4597.847, 4143.669, 2900.000, 1476.482, 4338.202],
+                     [2692.582, 2679.589, 2184.032, 900.000, 1389.244, 5879.625],
+                     [2561.249, 2547.194, 2000.0, 400.0, 1612.451, 5882.176]]
+
+        for i, (p1, p2) in enumerate(lines):
+            for j, p3 in enumerate(points):
+
+                value = str(T.aomr_obj._find_distance_between_line_and_point(p1, p2, p3)).split('.')
+                approx_result = float(value[0] + '.' + value[1][:3])
+
+                assert distances[i][j] == approx_result
