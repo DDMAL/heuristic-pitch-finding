@@ -514,7 +514,6 @@ class AomrObject(object):
         self.avg_punctum = self._average_punctum(glyphs)
         av_punctum = self.avg_punctum
         for g in glyphs:
-            print '\n\nglyph'
             g_cc = None
             sub_glyph_center_of_mass = None
             glyph_id = g.get_main_id()
@@ -537,6 +536,7 @@ class AomrObject(object):
             if glyph_type not in no_pitch_glyphs:
                 # print g, '\n', center_of_mass, '\n', stinfo
                 line_or_space, line_num = self._return_line_or_space_no(g, center_of_mass, staff_locations)
+                # print staff_number, glyph_var, line_or_space, line_num
                 strt_pos = self._strt_pos_find(line_or_space, line_num)
             else:
                 strt_pos = None
@@ -563,7 +563,6 @@ class AomrObject(object):
         for i, glyph_array in enumerate(sorted_glyphs):
 
             gtype = __glyph_type(glyph_array)
-
             if gtype == 'clef':
 
                 # overwrite last defined clef
@@ -578,19 +577,19 @@ class AomrObject(object):
 
                 # get clef shifts
                 SCALE = self.SCALE
-                noteShift = SCALE.index(clef)
-                noteShiftAlt = (0 if noteShift == 0 else len(SCALE) - noteShift)
+                noteShift = (0 if SCALE.index(clef) == 0 else len(SCALE) - SCALE.index(clef) - 1)
 
                 # find note
-                note = SCALE[int((clef_line - my_strt_pos - noteShift) % len(SCALE))]
+                note = SCALE[int((clef_line - my_strt_pos + noteShift) % len(SCALE))]
 
                 # find octave
                 if my_strt_pos <= clef_line:
-                    octave = 3 + int((clef_line - my_strt_pos + noteShiftAlt) / len(SCALE))
+                    octave = 3 + int((clef_line - my_strt_pos + noteShift) / len(SCALE))
                 elif my_strt_pos > clef_line:
                     octave = 3 - int((len(SCALE) - clef_line + my_strt_pos - 1 - noteShift) / len(SCALE))
 
                 glyph_array.extend([note, octave, clef_line, 'clef.' + clef])
+                # print clef, note, octave, glyph_array[1:], glyph_array[0].get_main_id()
 
             else:   # no pitch info necessary
                 glyph_array.extend([None, None, None, None])
@@ -612,19 +611,18 @@ class AomrObject(object):
             staff_coords = st['coords']
 
             if self._intersecting_coords(glyph_coords, staff_coords):
-                print('found intersecting staff', st['staff_no'])
+                # print 'found intersecting staff', st['staff_no']
                 return st['line_positions'], st['staff_no']
 
-            # staff whose y bound includes this glyph
+                # staff whose y bound includes this glyph
             if self._y_intersecting_coords(glyph_coords, staff_coords[1], staff_coords[3]):
+                # print 'Y BOUND', st['staff_no']
                 y_bound_staves.append(st)
-                print 'Y BOUND', st['staff_no']
 
         # find closest staff within y bound
         if y_bound_staves:
             return self._find_closest_y_staff_no(g, center_of_mass, y_bound_staves)
         else:   # else find closest staff
-            print '\n\ncheck all\n\n'
             return self._find_closest_staff_no(g, center_of_mass, self.interpolated_staves)
 
     def _find_closest_y_staff_no(self, g, center_of_mass, staves):
@@ -664,8 +662,6 @@ class AomrObject(object):
                 closest = (min(distances), st['line_positions'], st['staff_no'])
                 # print closest[0], i
 
-        print('found closest staff', closest[2])
-        # print(closest)
         return closest[1:]
 
     def _find_distance_between_line_and_point(self, p1, p2, p3):
@@ -727,21 +723,21 @@ class AomrObject(object):
             0 = space
             1 = line
 
-            0   0   0            ---------                     ledger 2
-            1       1
-            0   1   2            ---------                     ledger 1
-            1       3
-            0   2   4  ---------------------------------       line 4
-            1       5
-            0   3   6  ---------------------------------       line 3
-            1       7
-            0   4   8  ---------------------------------       line 2
-            1       9
-            0   5   10  ---------------------------------      line 1
-            1       11
-            0   6   12           ---------                     ledger -1
-            1       13
-            0   7   14           ---------                     ledger -2
+            0   0   1            ---------                     ledger 2
+            1       2
+            0   1   3            ---------                     ledger 1
+            1       4
+            0   2   5   --------------------------------       line 4
+            1       6
+            0   3   7   --------------------------------       line 3
+            1       8
+            0   4   9   --------------------------------       line 2
+            1       10
+            0   5   11  --------------------------------       line 1
+            1       12
+            0   6   13           ---------                     ledger -1
+            1       14
+            0   7   15           ---------                     ledger -2
             ......
 
         """
@@ -809,17 +805,17 @@ class AomrObject(object):
 
                 # upper line
                 if ref_y < min(space):
-                    print 'line', i
+                    # print 'line', i
                     return 0, i
 
                 # within space
                 elif ref_y >= min(space) and ref_y <= max(space):
-                    print 'space', i
+                    # print 'space', i
                     return 1, i
 
                 # lower line
                 elif ref_y > max(space):
-                    print 'line', i + 1
+                    # print 'line', i + 1
                     return 0, i + 1
 
                 else:
@@ -827,7 +823,7 @@ class AomrObject(object):
 
         # glyph is below staff
         return 0, len(staff)
-        print 'failed _return_line_or_space_no'
+        # print 'failed _return_line_or_space_no'
 
     def _gen_line_func(self, point_left, point_right):
         # generates a line function based on two points,
