@@ -491,8 +491,7 @@ class AomrObject(object):
         elif self.srmv_algorithm == 4:
             musicstaves_no_staves = musicstaves.MusicStaves_rl_simple(self.image, 0, 0)
 
-        # grab the number of stafflines from the first staff. We'll use that
-        # as the global value
+        # grab the number of stafflines from the first staff. We'll use that as the global value
         num_stafflines = self.page_result['staves'][0]['num_lines']
         musicstaves_no_staves.remove_staves(u'all', num_stafflines)
         self.img_no_st = musicstaves_no_staves.image
@@ -808,7 +807,6 @@ class AomrObject(object):
 
         # glyph is below staff
         return 0, len(staff)
-        # print 'failed _return_line_or_space_no'
 
     def _gen_line_func(self, point_left, point_right):
         # generates a line function based on two points,
@@ -858,10 +856,6 @@ class AomrObject(object):
         return ltype(l)
 
     def _average_punctum(self, glyphs):
-        """ Average Punctum.
-            returns the average number of columns of the punctums in a given page
-        """
-
         width_sum = 0
         num_punctums = 0
         for g in glyphs:
