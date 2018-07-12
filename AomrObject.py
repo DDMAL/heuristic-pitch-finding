@@ -569,6 +569,7 @@ class AomrObject(object):
         for i, st in enumerate(self.interpolated_staves):
             staff_coords = st['coords']
 
+            # intercecting staves
             if self._intersecting_coords(glyph_coords, staff_coords):
                 amount = self._intersect_amount(glyph_coords, staff_coords)
                 if amount > max_intersection:
@@ -576,7 +577,7 @@ class AomrObject(object):
                     intersecting_staff = st
                 # print 'found intersecting staff', st['staff_no']
 
-            # staff whose y bound includes this glyph
+            # y bounded staves
             if self._y_intersecting_coords(glyph_coords, staff_coords[1], staff_coords[3]):
                 y_bound_staves.append(st)
                 # print 'Y BOUND', st['staff_no']
@@ -586,7 +587,7 @@ class AomrObject(object):
             return intersecting_staff['line_positions'], intersecting_staff['staff_no']
 
         # 2. Glyph is on closest staff whose y range contains it
-        if y_bound_staves:
+        elif y_bound_staves:
             return self._find_closest_y_staff_no(g, center_of_mass, y_bound_staves)
 
         # 3. Glyph is on closest staff (shortest line to edge)
@@ -596,6 +597,34 @@ class AomrObject(object):
         # Glyph has no staff
         else:
             return None
+
+    def _intersecting_coords(self, coord1, coord2):
+        # do these two rectangles intersect
+        return not (coord2[0] > coord1[2] or
+                    coord2[2] < coord1[0] or
+                    coord2[1] > coord1[3] or
+                    coord2[3] < coord1[1])
+
+    def _intersect_amount(self, coord1, coord2):
+
+        l = max(coord1[0], coord2[0])
+        b = max(coord1[1], coord2[1])
+        r = min(coord1[2], coord2[2])
+        t = min(coord1[3], coord2[3])
+
+        if not (l < r and b < t):
+            return 0
+        else:
+            return (r - l) * (t - b)
+
+    def _y_intersecting_coords(self, coord, ymin, ymax):
+        # do does rect lie within ymin and ymax
+        ymin = min(ymin, ymax)
+        ymax = max(ymin, ymax)
+        margin = self.get_staff_margin
+
+        return not (coord[1] > ymin - margin and coord[1] > ymax + margin or
+                    coord[3] < ymin - margin and coord[3] < ymax + margin)
 
     def _find_closest_y_staff_no(self, g, center_of_mass, staves):
         com_point = (g.offset_x + g.ncols, g.offset_y + center_of_mass)
@@ -666,34 +695,6 @@ class AomrObject(object):
         x2, y2 = p2
 
         return (((x2 - x1) ** 2) + ((y2 - y1) ** 2)) ** 0.5
-
-    def _intersecting_coords(self, coord1, coord2):
-        # do these two rectangles intersect
-        return not (coord2[0] > coord1[2] or
-                    coord2[2] < coord1[0] or
-                    coord2[1] > coord1[3] or
-                    coord2[3] < coord1[1])
-
-    def _intersect_amount(self, coord1, coord2):
-
-        l = max(coord1[0], coord2[0])
-        b = max(coord1[1], coord2[1])
-        r = min(coord1[2], coord2[2])
-        t = min(coord1[3], coord2[3])
-
-        if not (l < r and b < t):
-            return 0
-        else:
-            return (r - l) * (t - b)
-
-    def _y_intersecting_coords(self, coord, ymin, ymax):
-        # do does rect lie within ymin and ymax
-        ymin = min(ymin, ymax)
-        ymax = max(ymin, ymax)
-        margin = self.get_staff_margin
-
-        return not (coord[1] > ymin - margin and coord[1] > ymax + margin or
-                    coord[3] < ymin - margin and coord[3] < ymax + margin)
 
     ######################
     # Get Pitch Position
