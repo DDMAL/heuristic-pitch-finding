@@ -32,43 +32,34 @@ class AomrObject(object):
         """
             Constructs and returns an AOMR object
         """
-        # self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a', 'g', 'f',
-        #               'e', 'd', 'c', 'b', 'a', 'g', 'f', 'e', 'd', 'c', 'b', 'a']
-        # self.SCALE = ['g', 'f', 'e', 'd', 'c', 'b', 'a']
         self.SCALE = ['c', 'd', 'e', 'f', 'g', 'a', 'b']
+        self.clef = 'c', 3              # default clef
 
-        self.clef = 'c', 3
+        self.transpose = 0              # shift all notes by x 2nds
+        self.space_proportion = 0.5     # space when within middle portion between lines
+        self.get_staff_margin = 2.0     # glyphs are on staff when within x punctums above/below it
+        self.always_find_staff_no = False
 
-        self.transpose = 0             # shift all notes by how many 2nds?
-        self.space_proportion = 0.5    # glyph must be within middle % of the space between two lines for a space
-        self.get_staff_margin = 2.0     # bounding box of staff +/- x.x% avg punctum width
-
-        self.filename = image
-
+        # staff finding kwargs
         self.lines_per_staff = kwargs['lines_per_staff']
         self.sfnd_algorithm = kwargs['staff_finder']
         self.srmv_algorithm = kwargs['staff_removal']
         self.binarization = kwargs["binarization"]
 
-        if "glyphs" in kwargs.values():
-            self.classifier_glyphs = kwargs["glyphs"]
-        if "weights" in kwargs.values():
-            self.classifier_weights = kwargs["weights"]
-
         self.discard_size = kwargs["discard_size"]
         self.avg_punctum = None
 
+        self.staffless_glyphs = ['skip']        # any staffless glyph IS pitchless
+        self.pitchless_glyphs = ['division']
+
         # the result of the staff finder. Mostly for convenience
+        self.staff_finder = None
         self.staves = None
-
-        self.staff_locations = None
         self.interpolated_staves = None
-        self.staff_coordinates = None
+        self.staff_bounds = None
 
-        # a global to keep track of the number of stafflines.
-        self.num_stafflines = None
         # cache this once so we don't have to constantly load it
-        self.image = self.filename
+        self.image = image
         self.image_resolution = self.image.resolution
 
         if self.image.data.pixel_type != ONEBIT:
@@ -113,52 +104,73 @@ class AomrObject(object):
     # Public Functions
     ####################
 
-    def run(self, page_glyphs, pitch_staff_technique=0):
-        lg.debug("Running the finding code.")
-
-        lg.debug("1. Finding staves.")
-        self.find_staves()
-
-        lg.debug("2. Finding staff coordinates")
-        self.staff_coords()
-
-        if pitch_staff_technique is 0:
-            lg.debug("3a. Finding technique is miyao.")
-            self.sglyphs = self.miyao_pitch_finder(page_glyphs)
+    def find_staves(self):
+        if self.sfnd_algorithm is 0:
+            s = musicstaves.StaffFinder_miyao(self.image)
+        elif self.sfnd_algorithm is 1:
+            s = musicstaves.StaffFinder_dalitz(self.image)
+        elif self.sfnd_algorithm is 2:
+            s = musicstaves.StaffFinder_projections(self.image)
         else:
-            lg.debug("3b. Finding technique is average lines.")
-            self.sglyphs = self.avg_lines_pitch_finder(page_glyphs)
+            raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
-        # self.sglyphs = sorted(unordered_glyphs, key=itemgetter(1,2))
+        return self._find_staff_locations(s)
 
-        lg.debug("5. Constructing JSON output.")
-        data = {}
-        for s, stave in enumerate(self.staff_coordinates):
-            contents = []
-            for glyph, staff, offset, strt_pos, note, octave, clef_pos, clef in self.sglyphs:
-                glyph_id = glyph.get_main_id()
-                glyph_type = glyph_id.split(".")[0]
-                glyph_form = glyph_id.split(".")[1:]
-                # lg.debug("sg[1]:{0} s:{1} sg{2}".format(sg[1], s+1, sg))
-                # structure: g, stave, g.offset_x, note, strt_pos
-                if staff == s + 1:
-                    j_glyph = {'type': glyph_type,
-                               'form': glyph_form,
-                               'coord': [glyph.offset_x, glyph.offset_y, glyph.offset_x + glyph.ncols, glyph.offset_y + glyph.nrows],
-                               'strt_pitch': note,
-                               'octv': octave,
-                               'strt_pos': strt_pos,
-                               'clef_pos': clef_pos,
-                               'clef': clef}
-                    contents.append(j_glyph)
-            data[s] = {'coord': stave, 'content': contents}
-        # print data
-        lg.debug("6. Returning the data. Done running for this pag.")
-        return data
+    def miyao_pitch_finder(self, glyphs):
+        """
+            Returns a set of glyphs with pitches
+        """
+        glyphs = list(filter(lambda g: g.get_main_id() != 'skip', glyphs))
+
+        proc_glyphs = []
+        st_bound_coords = self.staff_bounds
+        st_full_coords = self.interpolated_staves
+
+        # what to do if there are no punctum on a page???
+        self.avg_punctum = self._average_punctum(glyphs)
+        av_punctum = self.avg_punctum
+        for g in glyphs:
+            g_cc = None
+            sub_glyph_center_of_mass = None
+            glyph_id = g.get_main_id()
+            glyph_var = glyph_id.split('.')
+            glyph_type = glyph_var[0]
+
+            # find glyph's center_of_mass
+            if glyph_type == 'neume':
+                center_of_mass = self._process_neume(g)
+            else:
+                center_of_mass = self._x_projection_vector(g)
+
+            # find staff for current glyph
+            stinfo = self._get_staff_no(g, center_of_mass)
+            if not stinfo:
+                strt_pos, staff_number = None, None
+            else:
+                staff_locations, staff_number = stinfo
+
+                if glyph_type not in self.pitchless_glyphs:
+                    line_or_space, line_num = self._return_line_or_space_no(g, center_of_mass, staff_locations)
+                    strt_pos = self._strt_pos_find(line_or_space, line_num)
+                    # print staff_number, glyph_var, line_or_space, line_num
+                else:
+                    strt_pos = None
+                    staff_number = None
+
+                proc_glyphs.append([g, staff_number, g.offset_x, strt_pos])
+
+        sorted_glyphs = self._sort_glyphs(proc_glyphs)
+
+        # print self.staff_finder
+        # print self.staves
+        # print self.interpolated_staves
+        # print '\n\n', self.staff_bounds
+
+        return sorted_glyphs
 
     def get_page_properties(self):
         return {
-            # 'filename': self.filename,
+            # 'filename': self.image,
             'resolution': self.image_resolution,
             'bounding_box': {
                 'ncols': self.image.ncols,
@@ -169,7 +181,7 @@ class AomrObject(object):
         }
 
     def get_staves(self):
-        return [self.staff_locations, self.interpolated_staves]
+        return [self.staves, self.interpolated_staves]
 
     def get_staves_properties(self):
         num_staves = len(self.interpolated_staves)
@@ -300,18 +312,6 @@ class AomrObject(object):
     # Staff Finding
     #################
 
-    def find_staves(self):
-        if self.sfnd_algorithm is 0:
-            s = musicstaves.StaffFinder_miyao(self.image)
-        elif self.sfnd_algorithm is 1:
-            s = musicstaves.StaffFinder_dalitz(self.image)
-        elif self.sfnd_algorithm is 2:
-            s = musicstaves.StaffFinder_projections(self.image)
-        else:
-            raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
-
-        return self._find_staff_locations(s)
-
     def _find_staff_locations(self, s):
         scanlines = 20
         blackness = 0.8
@@ -319,7 +319,7 @@ class AomrObject(object):
 
         # there is no one right value for these things. We'll give it the old college try
         # until we find something that works.
-        while not self.staves:
+        while not self.staff_finder:
             if blackness <= 0.3:
                 # we want to return if we've reached a limit and still can't
                 # find staves.
@@ -332,19 +332,19 @@ class AomrObject(object):
                 return None
 
             # get a polygon object. This stores a set of vertices for x,y values along the staffline.
-            self.staves = s.get_polygon()
+            self.staff_finder = s.get_polygon()
 
-            if not self.staves:
+            if not self.staff_finder:
                 lg.debug("No staves found. Decreasing blackness.")
                 blackness -= 0.1
 
-        # if len(self.staves) < self.lines_per_staff:
+        # if len(self.staff_finder) < self.lines_per_staff:
         #     # the number of lines found was less than expected.
         #     return None
 
         all_line_positions = []
 
-        for i, staff in enumerate(self.staves):
+        for i, staff in enumerate(self.staff_finder):
             yv = []
             xv = []
 
@@ -459,20 +459,21 @@ class AomrObject(object):
         # ptsLen = [len(n) for n in all_line_positions]
         # numPtsMode = max(ptsLen, key = ptsLen.count)     # find most common number of points per line
 
-        self.staff_locations = all_line_positions
-        self.interpolated_staves = self._interpolate_staff_locations(self.staff_locations)
-        return self.staff_locations
+        self.staves = all_line_positions
+        self.interpolated_staves = self._interpolate_staff_locations(self.staves)
+        self._staff_coords()
 
-    def staff_coords(self):
+        return self.staves
+
+    def _staff_coords(self):
         """
             Returns the coordinates for each one of the staves
         """
-        lg.debug("Getting staff coordinates")
         st_coords = []
-        for i, staff in enumerate(self.staves):
+        for i, staff in enumerate(self.staff_finder):
             st_coords.append(self.page_result['staves'][i]['coords'])
 
-        self.staff_coordinates = st_coords
+        self.staff_bounds = st_coords
         return st_coords
 
     def remove_stafflines(self):
@@ -499,53 +500,6 @@ class AomrObject(object):
     #################
     # Pitch Finding
     #################
-
-    def miyao_pitch_finder(self, glyphs):
-        """
-            Returns a set of glyphs with pitches
-        """
-        glyphs = list(filter(lambda g: g.get_main_id() != 'skip', glyphs))
-
-        proc_glyphs = []
-        st_bound_coords = self.staff_coordinates
-        st_full_coords = self.interpolated_staves
-
-        # what to do if there are no punctum on a page???
-        self.avg_punctum = self._average_punctum(glyphs)
-        av_punctum = self.avg_punctum
-        for g in glyphs:
-            g_cc = None
-            sub_glyph_center_of_mass = None
-            glyph_id = g.get_main_id()
-            glyph_var = glyph_id.split('.')
-            glyph_type = glyph_var[0]
-
-            # find glyph's center_of_mass
-            if glyph_type == 'neume':
-                center_of_mass = self._process_neume(g)
-            else:
-                center_of_mass = self._x_projection_vector(g)
-
-            # find staff for current glyph
-            stinfo = self._get_staff_no(g, center_of_mass)
-            if stinfo != None:
-                staff_locations, staff_number = stinfo
-
-            # based on glyph type, find staff positionor don't
-            no_pitch_glyphs = ['alteration', 'division', 'skip']
-            if glyph_type not in no_pitch_glyphs:
-                # print g, '\n', center_of_mass, '\n', stinfo
-                line_or_space, line_num = self._return_line_or_space_no(g, center_of_mass, staff_locations)
-                # print staff_number, glyph_var, line_or_space, line_num
-                strt_pos = self._strt_pos_find(line_or_space, line_num)
-            else:
-                strt_pos = None
-                staff_number = None
-
-            proc_glyphs.append([g, staff_number, g.offset_x, strt_pos])
-
-        sorted_glyphs = self._sort_glyphs(proc_glyphs)
-        return sorted_glyphs
 
     def _strt_pos_find(self, line_or_space, line_num):
         # sets 0 as the 2nd ledger line above a staff
@@ -601,29 +555,47 @@ class AomrObject(object):
     #####################
 
     def _get_staff_no(self, g, center_of_mass):
-        # print '\n'
+
+        if g.get_main_id().split('.')[0] in self.staffless_glyphs:
+            return None
 
         glyph_coords = [g.offset_x, g.offset_y, g.offset_x + g.ncols, g.offset_y + g.nrows]
+
+        max_intersection = 0
+        intersecting_staff = None
+
         y_bound_staves = []
 
-        # if a glyph intersects a staff, return that staff
         for i, st in enumerate(self.interpolated_staves):
             staff_coords = st['coords']
 
             if self._intersecting_coords(glyph_coords, staff_coords):
+                amount = self._intersect_amount(glyph_coords, staff_coords)
+                if amount > max_intersection:
+                    max_intersection = amount
+                    intersecting_staff = st
                 # print 'found intersecting staff', st['staff_no']
-                return st['line_positions'], st['staff_no']
 
-                # staff whose y bound includes this glyph
+            # staff whose y bound includes this glyph
             if self._y_intersecting_coords(glyph_coords, staff_coords[1], staff_coords[3]):
-                # print 'Y BOUND', st['staff_no']
                 y_bound_staves.append(st)
+                # print 'Y BOUND', st['staff_no']
 
-        # find closest staff within y bound
+        # 1. Glyph is on a staff it intersects
+        if intersecting_staff:
+            return intersecting_staff['line_positions'], intersecting_staff['staff_no']
+
+        # 2. Glyph is on closest staff whose y range contains it
         if y_bound_staves:
             return self._find_closest_y_staff_no(g, center_of_mass, y_bound_staves)
-        else:   # else find closest staff
+
+        # 3. Glyph is on closest staff (shortest line to edge)
+        elif self.always_find_staff_no:
             return self._find_closest_staff_no(g, center_of_mass, self.interpolated_staves)
+
+        # Glyph has no staff
+        else:
+            return None
 
     def _find_closest_y_staff_no(self, g, center_of_mass, staves):
         com_point = (g.offset_x + g.ncols, g.offset_y + center_of_mass)
@@ -701,6 +673,18 @@ class AomrObject(object):
                     coord2[2] < coord1[0] or
                     coord2[1] > coord1[3] or
                     coord2[3] < coord1[1])
+
+    def _intersect_amount(self, coord1, coord2):
+
+        l = max(coord1[0], coord2[0])
+        b = max(coord1[1], coord2[1])
+        r = min(coord1[2], coord2[2])
+        t = min(coord1[3], coord2[3])
+
+        if not (l < r and b < t):
+            return 0
+        else:
+            return (r - l) * (t - b)
 
     def _y_intersecting_coords(self, coord, ymin, ymax):
         # do does rect lie within ymin and ymax
@@ -954,7 +938,6 @@ if __name__ == "__main__":
     staves = aomr_obj.find_staves()                # returns true!
     # print aomr_obj.get_staves_properties()
     # print staves
-    aomr_obj.staff_coords()
     sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want
 
     output_json = {
