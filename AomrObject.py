@@ -1001,11 +1001,6 @@ if __name__ == "__main__":
     # get staves information
     for i, s in enumerate(staves):
 
-        # get starts and end of each line
-        line_ends = []
-        for j, l in enumerate(s['line_positions']):
-            line_ends.append([l[0], l[-1]])
-
         # make bounding_box same as for glyphs
         bounding_box = {
             'ncols': s['coords'][2] - s['coords'][0],
@@ -1018,7 +1013,7 @@ if __name__ == "__main__":
             'staff_no': s['staff_no'],
             'bounding_box': bounding_box,
             'num_lines': s['num_lines'],
-            'line_ends': line_ends,
+            'line_positions': s['line_positions'],
         }
 
         output_json['staves'].append(cur_json)
