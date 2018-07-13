@@ -114,7 +114,8 @@ class AomrObject(object):
         else:
             raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
-        return self._find_staff_locations(s)
+        staves = self._find_staves(s)
+        return self._process_staves(staves)
 
     def miyao_pitch_finder(self, glyphs):
         """
@@ -312,7 +313,7 @@ class AomrObject(object):
     # Staff Finding
     #################
 
-    def _find_staff_locations(self, s):
+    def _find_staves(self, s):
         scanlines = 20
         blackness = 0.8
         tolerance = -1
@@ -453,17 +454,69 @@ class AomrObject(object):
             }
             all_line_positions.append(self.page_result['staves'][i])
 
-        # pdb.set_trace()
-
-        # # some hacky interpolation of missing points
-        # ptsLen = [len(n) for n in all_line_positions]
-        # numPtsMode = max(ptsLen, key = ptsLen.count)     # find most common number of points per line
-
         self.staves = all_line_positions
         self.interpolated_staves = self._interpolate_staff_locations(self.staves)
         self._staff_coords()
 
-        return self.staves
+        return self.interpolated_staves
+
+    def _process_staves(self, staves):
+
+        processed_staves = self._reorder_staves_LTR_TTB(staves)
+        self.interpolated_staves = processed_staves
+        return processed_staves
+
+    def _reorder_staves_LTR_TTB(self, staves):
+        # reorder staves left to right, top to bottom
+
+        ordered_staves = []
+
+        # group by y intersection
+        for i, st in enumerate(staves):
+
+            # initial staff
+            if not ordered_staves:
+                ordered_staves.append([st])
+            else:
+                col_placement = -1  # vertical insert
+                for j, group in enumerate(ordered_staves):
+
+                    y_intersects = False
+                    row_placement = -1  # horizontal insert
+
+                    # find if st intersects any staff in this group
+                    for k, st2 in enumerate(group):
+                        if self._y_intersecting_coords(st['coords'], st2['coords'][1], st2['coords'][3]):
+                            y_intersects = True,
+                            if st['coords'][0] > st2['coords'][0]:
+                                row_placement = k + 1   # get row pos
+                            print 'y_intersects', k
+
+                    # place in correct row
+                    if y_intersects:
+                        group.insert(row_placement, st)
+                        break
+
+                    # get col pos
+                    elif st['coords'][1] > max(st2['coords'][1] for st2 in group):
+                        col_placement = j + 1
+
+                if not y_intersects:
+                    ordered_staves.insert(col_placement, [st])
+
+        # number staves and flatten
+        numbered_staves = []
+        count = 0
+        for group in ordered_staves:
+            for st in group:
+                count += 1
+                st['staff_no'] = count
+                numbered_staves.append(st)
+
+        print[[x['staff_no'] for x in group] for group in ordered_staves]
+        print[x['staff_no'] for x in numbered_staves]
+
+        return numbered_staves
 
     def _staff_coords(self):
         """
