@@ -1001,7 +1001,6 @@ if __name__ == "__main__":
     # get staves information
     for i, s in enumerate(staves):
 
-        # make bounding_box same as for glyphs
         bounding_box = {
             'ncols': s['coords'][2] - s['coords'][0],
             'nrows': s['coords'][3] - s['coords'][1],
