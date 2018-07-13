@@ -72,28 +72,33 @@ class aOMR_Pitchfinding(RodanTask):
 
         aomr_obj = AomrObject(image, **kwargs)
         staves = aomr_obj.find_staves()                # returns true!
-        aomr_obj.staff_coords()
         sorted_glyphs = aomr_obj.miyao_pitch_finder(glyphs)  # returns what we want
 
         output_json = {
+            'page': [],
             'staves': [],
             'glyphs': [],
         }
         pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
 
+        # get page information
+        output_json['page'] = aomr_obj.get_page_properties()
+
         # get staves information
         for i, s in enumerate(staves):
 
-            # get starts and end of each line
-            line_ends = []
-            for j, l in enumerate(s['line_positions']):
-                line_ends.append([l[0], l[-1]])
+            bounding_box = {
+                'ncols': s['coords'][2] - s['coords'][0],
+                'nrows': s['coords'][3] - s['coords'][1],
+                'ulx': s['coords'][0],
+                'uly': s['coords'][1],
+            }
 
             cur_json = {
                 'staff_no': s['staff_no'],
-                'coords': s['coords'],
+                'bounding_box': bounding_box,
                 'num_lines': s['num_lines'],
-                'line_ends': line_ends,
+                'line_positions': s['line_positions'],
             }
 
             output_json['staves'].append(cur_json)
