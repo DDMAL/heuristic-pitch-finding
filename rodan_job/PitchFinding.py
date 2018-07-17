@@ -1,6 +1,12 @@
+from gamera import gamera_xml
+from operator import itemgetter, attrgetter
+
+
 class PitchFinder(object):
 
     def __init__(self, **kwargs):
+
+        self.discard_size = kwargs['discard_size']
 
         self.SCALE = ['c', 'd', 'e', 'f', 'g', 'a', 'b']
         self.clef = 'c', 3              # default clef
@@ -15,47 +21,67 @@ class PitchFinder(object):
         self.staffless_glyphs = ['skip']        # any staffless glyph IS pitchless
         self.pitchless_glyphs = ['division']
 
+        self.glyphs = None
+        self.staves = None
+
+        self.sorted_glyphs = None
+
     ##########
     # Public
     ##########
 
     def get_pitches(self, glyphs, staves):
 
-        self._parse_staves(staves)
-        self._find_pitches(glyphs)
+        self._parse_inputs(glyphs, staves)
+        self._find_pitches(self.glyphs)
 
-        return 0
+        pitch_feature_names = ['staff', 'offset', 'strt_pos', 'note', 'octave', 'clef_pos', 'clef']
+
+        output = []
+        for i, g in enumerate(self.sorted_glyphs):
+
+            cur_json = {}
+            pitch_info = {}
+            glyph_info = {}
+
+            # get pitch information
+            for j, pf in enumerate(g[1:]):
+                pitch_info[pitch_feature_names[j]] = str(pf)
+            cur_json['pitch'] = pitch_info
+
+            # get glyph information
+            glyph_info['bounding_box'] = {
+                'ncols': g[0].ncols,
+                'nrows': g[0].nrows,
+                'ulx': g[0].ul.x,
+                'uly': g[0].ul.y,
+            }
+            glyph_info['state'] = gamera_xml.classification_state_to_name(g[0].classification_state)
+            glyph_info['name'] = g[0].id_name[0][1]
+            cur_json['glyph'] = glyph_info
+
+            output.append(cur_json)
+
+        return output
 
     ########
     # Main
     ########
 
-    def _parse_staves(self, staves):
-        pass
-        # st_coords = []
-     #    for i, staff in enumerate(self.staff_finder):
-     #        st_coords.append(self.staff_results[i]['coords'])
+    def _parse_inputs(self, glyphs, staves):
+        # filter out skips
+        self.glyphs = list(filter(lambda g: g.get_main_id() != 'skip', glyphs))
+        self.staves = staves
 
-     #    self.staff_bounds = st_coords
+        self.avg_punctum = self._average_punctum(self.glyphs)
 
     def _find_pitches(self, glyphs):
         # Returns a set of glyphs with pitches
 
-        # filter out skips
-        glyphs = list(filter(lambda g: g.get_main_id() != 'skip', glyphs))
-
         proc_glyphs = []
-        # st_bound_coords = self.staff_bounds
-        # st_full_coords = self.interpolated_staves
 
-        # what to do if there are no punctum on a page???
-        self.avg_punctum = self._average_punctum(glyphs)
-        av_punctum = self.avg_punctum
-        for g in glyphs:
-            g_cc = None
-            sub_glyph_center_of_mass = None
-            glyph_id = g.get_main_id()
-            glyph_var = glyph_id.split('.')
+        for g in self.glyphs:
+            glyph_var = g.get_main_id().split('.')
             glyph_type = glyph_var[0]
 
             # find glyph's center_of_mass
@@ -81,14 +107,12 @@ class PitchFinder(object):
 
                 proc_glyphs.append([g, staff_number, g.offset_x, strt_pos])
 
-        sorted_glyphs = self._sort_glyphs(proc_glyphs)
+        self.sorted_glyphs = self._sort_glyphs(proc_glyphs)
 
         # print self.staff_finder
         # print self.staves
         # print self.interpolated_staves
         # print '\n\n', self.staff_bounds
-
-        return sorted_glyphs
 
     ##################
     # Glyph Position
@@ -104,9 +128,9 @@ class PitchFinder(object):
 
         return self._x_projection_vector(g)
 
-    # creates a subimage of the original glyph
-    # and returns its center of mass
     def _x_projection_vector(self, glyph):
+        # creates a subimage of the original glyph
+        # and returns its center of mass
 
         center_of_mass = 0
 
@@ -126,7 +150,6 @@ class PitchFinder(object):
 
         return center_of_mass
 
-    # returns the center of mass of a given glyph
     def _center_of_mass(self, projection_vector):
         com = 0.
         s = 0.
@@ -155,8 +178,8 @@ class PitchFinder(object):
 
         y_bound_staves = []
 
-        for i, st in enumerate(self.interpolated_staves):
-            staff_coords = st['coords']
+        for i, st in enumerate(self.staves):
+            staff_coords = self._convert_bb_to_coords(st['bounding_box'])
 
             # intersecting staves
             amount = self._coord_intersect_area(glyph_coords, staff_coords)
@@ -180,7 +203,7 @@ class PitchFinder(object):
 
         # 3. Glyph is on closest staff (shortest line to edge)
         elif self.always_find_staff_no:
-            return self._find_closest_staff_no(g, center_of_mass, self.interpolated_staves)
+            return self._find_closest_staff_no(g, center_of_mass, self.staves)
 
         # Glyph has no staff
         else:
@@ -202,7 +225,7 @@ class PitchFinder(object):
         # does rect lie within ymin and ymax
         ymin = min(ymin, ymax)
         ymax = max(ymin, ymax)
-        margin = self.get_staff_margin
+        margin = int(self.get_staff_margin * self.avg_punctum)
 
         return not (coord[1] > ymin - margin and coord[1] > ymax + margin or
                     coord[3] < ymin - margin and coord[3] < ymax + margin)
@@ -212,8 +235,9 @@ class PitchFinder(object):
 
         closest = None
         for i, st in enumerate(staves):
-            distances = [abs(com_point[0] - st['coords'][0]),
-                         abs(com_point[0] - st['coords'][2])]
+            coord = self._convert_bb_to_coords(st['bounding_box'])
+            distances = [abs(com_point[0] - coord[0]),
+                         abs(com_point[0] - coord[2])]
 
             if closest == None or closest[0] > min(distances):
                 closest = (min(distances), st['line_positions'], st['staff_no'])
@@ -225,14 +249,15 @@ class PitchFinder(object):
 
         closest = None
         for i, st in enumerate(staves):
+            coord = self._convert_bb_to_coords(st['bounding_box'])
 
             # print i, '/', len(staves) - 1
 
             # define corner points
-            ul = (st['coords'][0], st['coords'][1])
-            ur = (st['coords'][2], st['coords'][1])
-            ll = (st['coords'][0], st['coords'][3])
-            lr = (st['coords'][2], st['coords'][3])
+            ul = (coord[0], coord[1])
+            ur = (coord[2], coord[1])
+            ll = (coord[0], coord[3])
+            lr = (coord[2], coord[3])
 
             d1 = self._find_distance_between_line_and_point(ul, ur, com_point)
             d2 = self._find_distance_between_line_and_point(ur, lr, com_point)
@@ -470,3 +495,12 @@ class PitchFinder(object):
             return width_sum / num_punctums
         else:
             return 0  # no average punctums, so no average size
+
+    def _convert_bb_to_coords(self, bounding_box):
+        # bounding box -> coordinates
+        ulx = bounding_box['ulx']
+        uly = bounding_box['uly']
+        lrx = ulx + bounding_box['ncols']
+        lry = uly + bounding_box['nrows']
+
+        return [ulx, uly, lrx, lry]

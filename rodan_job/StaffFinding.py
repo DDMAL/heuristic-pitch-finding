@@ -26,15 +26,10 @@ class StaffFinder(object):
 
     def get_staves(self, image):
 
-        if self.sfnd_algorithm is 0:
-            s = musicstaves.StaffFinder_miyao(image)
-        elif self.sfnd_algorithm is 1:
-            s = musicstaves.StaffFinder_dalitz(image)
-        elif self.sfnd_algorithm is 2:
-            s = musicstaves.StaffFinder_projections(image)
-        else:
-            raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
+        if image.data.pixel_type != ONEBIT:
+            image = self._binarize_image(image)
 
+        s = self._get_staff_finding_algorithm(image, self.sfnd_algorithm)
         self._find_staves(s)
         self._process_staves()
 
@@ -58,6 +53,60 @@ class StaffFinder(object):
             output.append(cur_json)
 
         return output
+
+    def get_page_properties(self, image):
+        output = {
+            # 'filename': image,
+            'resolution': image.resolution,
+            'bounding_box': {
+                'ncols': image.ncols,
+                'nrows': image.nrows,
+                'ulx': 0,
+                'uly': 0,
+            }
+        }
+
+        return output
+
+    def _binarize_image(self, image):
+        image_resolution = image.resolution
+        image = image.to_greyscale()
+        bintypes = ['threshold',
+                    'otsu_threshold',
+                    'sauvola_threshold',
+                    'niblack_threshold',
+                    'gatos_threshold',
+                    'abutaleb_threshold',
+                    'tsai_moment_preserving_threshold',
+                    'white_rohrer_threshold']
+        image = getattr(image, bintypes[self.binarization])(0)
+        # BUGFIX: sometimes an image loses its resolution after being binarized.
+        if image.resolution < 1:
+            image.resolution = image_resolution
+
+        # check the amount of blackness of the image. If it's inverted,
+        # the black area will vastly outweigh the white area.
+        area = image.area().tolist()[0]
+        black_area = image.black_area()[0]
+
+        if area == 0:
+            raise AomrError("Cannot divide by a zero area. Something is wrong.")
+
+        # if greater than 70% black, invert the image.
+        if (black_area / area) > 0.7:
+            image.invert()
+
+        return image
+
+    def _get_staff_finding_algorithm(self, image, sfnd_alg):
+        if sfnd_alg == 0:
+            return musicstaves.StaffFinder_miyao(image)
+        elif sfnd_alg is 1:
+            return musicstaves.StaffFinder_dalitz(image)
+        elif sfnd_alg is 2:
+            return musicstaves.StaffFinder_projections(image)
+        else:
+            raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
     #################
     # Interpolation
