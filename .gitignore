@@ -106,3 +106,6 @@ ENV/
 # my ignored stuff
 ignore
 venv*
+.DS_Store
+*.json
+.pytest_cache/
