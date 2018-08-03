@@ -1,5 +1,5 @@
-# heuristic-pitch-finding
-Pitch finding for square notation based on heuristics as a job in the workflow builder [```Rodan```](https://github.com/DDMAL/Rodan)
+# Heuristic Pitch Finding
+Heuristic staff and pitch finding for square as a job in the workflow builder [```Rodan```](https://github.com/DDMAL/Rodan)
 
 ## Installation
 - Move this directory into the rodan `jobs` folder
@@ -22,3 +22,8 @@ RODAN_JOB_PACKAGES = (
 ## Running Rodan
 - Follow the [rodan-docker guide](https://github.com/DDMAL/rodan-docker/blob/master/README.md) to have docker set up.
 - Once the above installation steps are complete, run ```docker-compose -f docker-compose.yml -f docker-compose.rodan-dev.yml up``` 
+
+## Job Usage
+- To properly setup the pitchfinding workflow, connect the JSOMR output from a `Miyao Staff Finding` job to the JSOMR of a `Heuristic Pitchfinding` job. 
+- Staff finding can be run independently if only the staff positions, line points, and general page properties are required. 
+- *IMPORTANT* Pitch finding always requires the output of Staff Finding as an input and cannot be run indepently.
