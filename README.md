@@ -24,7 +24,7 @@ RODAN_JOB_PACKAGES = (
 - Once the above installation steps are complete, run ```docker-compose -f docker-compose.yml -f docker-compose.rodan-dev.yml up``` 
 
 ## Job Usage
-- To properly setup the pitchfinding workflow, connect the JSOMR output from a `Miyao Staff Finding` job to the JSOMR of a `Heuristic Pitchfinding` job. 
+- To properly setup the pitchfinding workflow, connect the *JSOMR* output from a `Miyao Staff Finding` job to the *JSOMR* input of a `Heuristic Pitchfinding` job. 
 
 *Important Note:*
 - Staff finding can be run independently if only the staff positions, line points, and general page properties are required. However, Pitchfinding always requires the output of Staff Finding as an input.
