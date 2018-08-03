@@ -17,7 +17,7 @@ class MiyaoStaffinding(RodanTask):
     author = 'Noah Baxter'
     description = 'Finds the location of staves in an image and returns them as a JSOMR file.'
     enabled = True
-    category = 'aOMR Analysis'
+    category = 'aOMR'
     interactive = False
 
     settings = {
@@ -35,7 +35,7 @@ class MiyaoStaffinding(RodanTask):
             'Interpolation': {
                 'type': 'boolean',
                 'default': True,
-                'description': 'Interpolate found line points. MUST be True for successful pitch finding'
+                'description': 'Interpolate found line points so all lines have the same number of points. This MUST be True for pitch finding to succeed.'
             }
         }
     }
@@ -58,7 +58,8 @@ class MiyaoStaffinding(RodanTask):
 
     def run_my_task(self, inputs, settings, outputs):
 
-        image = load_image(inputs['Image containing notes and staves (RGB, greyscale, or onebit)'][0]['resource_path'])
+        # Inputs
+        image = load_image(inputs['Image containing staves (RGB, greyscale, or onebit)'][0]['resource_path'])
         kwargs = {
             'lines_per_staff': settings['Number of lines'],
             'staff_finder': 0,          # 0 for miyao
@@ -76,6 +77,7 @@ class MiyaoStaffinding(RodanTask):
             'staves': staves,
         }
 
+        # Outputs
         outfile_path = outputs['JSOMR'][0]['resource_path']
         with open(outfile_path, "w") as outfile:
             outfile.write(json.dumps(jsomr))
@@ -102,7 +104,7 @@ class HeuristicPitchfinding(RodanTask):
         }
     }
     enabled = True
-    category = 'aOMR Analysis'
+    category = 'aOMR'
     interactive = False
     input_port_types = [{
         'name': 'JSOMR of staves and page properties',
@@ -128,7 +130,12 @@ class HeuristicPitchfinding(RodanTask):
 
     def run_my_task(self, inputs, settings, outputs):
 
-        jsomr = inputs['JSOMR of staves and page properties'][0]['resource_path']
+        # Inputs
+        infile_path = inputs['JSOMR of staves and page properties'][0]['resource_path']
+        with open(infile_path, 'r') as infile:
+            jsomr_string = infile.read()
+
+        jsomr = json.loads(jsomr_string)
         glyphs = gamera_xml.glyphs_from_xml(inputs['GameraXML - Classified Connected Components'][0]['resource_path'])
 
         kwargs = {
@@ -141,14 +148,15 @@ class HeuristicPitchfinding(RodanTask):
         staves = jsomr['staves']
         pitches = pf.get_pitches(glyphs, staves)
 
+        # Outputs
         jsomr = {
             'page': page,
             'staves': staves,
             'glyphs': pitches,
         }
 
-        outfile_path = outputs['JSOMR'][0]['resource_path']
-        with open(outfile_path, "w") as outfile:
+        outfile_path = outputs['JSOMR of glyphs, staves, and page properties'][0]['resource_path']
+        with open(outfile_path, 'w') as outfile:
             outfile.write(json.dumps(jsomr))
 
         return True

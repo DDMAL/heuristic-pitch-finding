@@ -40,4 +40,4 @@ if __name__ == "__main__":
 
     with open('jsomr_output.json', 'w') as f:
         f.write(json.dumps(jsomr))
-        print jsomr
+        # print jsomr
