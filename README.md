@@ -25,5 +25,6 @@ RODAN_JOB_PACKAGES = (
 
 ## Job Usage
 - To properly setup the pitchfinding workflow, connect the JSOMR output from a `Miyao Staff Finding` job to the JSOMR of a `Heuristic Pitchfinding` job. 
-- Staff finding can be run independently if only the staff positions, line points, and general page properties are required. 
-- *Important Note:* Pitch finding always requires the output of Staff Finding as an input and cannot be run indepently.
+
+*Important Note:*
+- Staff finding can be run independently if only the staff positions, line points, and general page properties are required. However, Pitchfinding always requires the output of Staff Finding as an input.
