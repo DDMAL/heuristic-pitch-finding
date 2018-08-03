@@ -85,8 +85,8 @@ class MiyaoStaffinding(RodanTask):
         return True
 
 
-class HeuristicPitchfinding(RodanTask):
-    name = 'Heuristic Pitchfinding'
+class HeuristicPitchFinding(RodanTask):
+    name = 'Heuristic Pitch Finding'
     author = 'Noah Baxter'
     description = 'Calculates pitch values for Classified Connected Componenets from a JSOMR containing staves, and returns the results as a JSOMR file'
     settings = {

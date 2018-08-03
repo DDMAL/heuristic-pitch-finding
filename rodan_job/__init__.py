@@ -1,1 +1,1 @@
-from base import MiyaoStaffinding, HeuristicPitchfinding
+from base import MiyaoStaffinding, HeuristicPitchFinding
