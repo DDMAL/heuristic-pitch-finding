@@ -1,4 +1,5 @@
 from gamera import gamera_xml
+from gamera.plugins.image_utilities import union_images
 from operator import itemgetter, attrgetter
 
 
@@ -132,23 +133,29 @@ class PitchFinder(object):
         # creates a subimage of the original glyph
         # and returns its center of mass
 
+        g = glyph
+        y_add = 0
+        # use only right portion of f clefs when getting center_of_mass
+        if 'clef.f' in glyph.get_main_id():
+            g, y_add = self._preprocess_f_clef(g)
+
         center_of_mass = 0
 
-        if glyph.ncols > self.discard_size and glyph.nrows > self.discard_size:
+        if g.ncols > self.discard_size and g.nrows > self.discard_size:
 
-            if glyph.ncols < self.avg_punctum:
-                this_punctum_size = glyph.ncols
+            if g.ncols < self.avg_punctum:
+                this_punctum_size = g.ncols
             else:
                 this_punctum_size = self.avg_punctum
 
-            temp_glyph = glyph.subimage((glyph.offset_x + 0.0 * this_punctum_size, glyph.offset_y),
-                                        ((glyph.offset_x + 1.0 * this_punctum_size - 1), (glyph.offset_y + glyph.nrows - 1)))
+            temp_glyph = g.subimage((g.offset_x + 0.0 * this_punctum_size, g.offset_y),
+                                    ((g.offset_x + 1.0 * this_punctum_size - 1), (g.offset_y + g.nrows - 1)))
             projection_vector = temp_glyph.projection_rows()
             center_of_mass = self._center_of_mass(projection_vector)
         else:
             center_of_mass = 0
 
-        return center_of_mass
+        return center_of_mass + y_add
 
     def _center_of_mass(self, projection_vector):
         com = 0.
@@ -161,6 +168,32 @@ class PitchFinder(object):
             return com
         com = s / v
         return com
+
+    def _preprocess_f_clef(self, glyph):
+        g = None
+
+        for gl in glyph.splitx(0.5):
+            gl_coords = self._convert_bb_to_coords(self._get_glyph_bb(gl))
+
+            # no g
+            if not g:
+                g = gl
+
+            # left of g
+            elif gl.offset_x + gl.ncols < g.offset_x:
+                pass
+
+            # x-intersecting g
+            elif self._x_intersecting_coords(gl_coords, g.offset_x, g.offset_x + g.ncols, 0):
+                g = union_images([g, gl])
+
+            # right of g
+            elif gl.offset_x >= g.offset_x + g.ncols:
+                g = gl
+
+        y_add = g.offset_y - glyph.offset_y
+
+        return g, y_add
 
     #################
     # Closest Staff
@@ -189,7 +222,7 @@ class PitchFinder(object):
                 # print 'found intersecting staff', st['staff_no']
 
             # y bounded staves
-            if self._y_intersecting_coords(glyph_coords, staff_coords[1], staff_coords[3]):
+            if self._y_intersecting_coords(glyph_coords, staff_coords[1], staff_coords[3], int(self.get_staff_margin * self.avg_punctum)):
                 y_bound_staves.append(st)
                 # print 'Y BOUND', st['staff_no']
 
@@ -220,15 +253,6 @@ class PitchFinder(object):
             return 0
         else:
             return (r - l) * (t - b)
-
-    def _y_intersecting_coords(self, coord, ymin, ymax):
-        # does rect lie within ymin and ymax
-        ymin = min(ymin, ymax)
-        ymax = max(ymin, ymax)
-        margin = int(self.get_staff_margin * self.avg_punctum)
-
-        return not (coord[1] > ymin - margin and coord[1] > ymax + margin or
-                    coord[3] < ymin - margin and coord[3] < ymax + margin)
 
     def _find_closest_y_staff_no(self, g, center_of_mass, staves):
         com_point = (g.offset_x + g.ncols, g.offset_y + center_of_mass)
@@ -496,6 +520,16 @@ class PitchFinder(object):
         else:
             return 0  # no average punctums, so no average size
 
+    def _get_glyph_bb(self, glyph):
+        bb = {
+            'ulx': glyph.offset_x,
+            'uly': glyph.offset_y,
+            'ncols': glyph.ncols,
+            'nrows': glyph.nrows,
+        }
+
+        return bb
+
     def _convert_bb_to_coords(self, bounding_box):
         # bounding box -> coordinates
         ulx = bounding_box['ulx']
@@ -504,3 +538,18 @@ class PitchFinder(object):
         lry = uly + bounding_box['nrows']
 
         return [ulx, uly, lrx, lry]
+
+    def _x_intersecting_coords(self, coord, xstart, xend, margin):
+        xmin = min(xstart, xend)
+        xmax = max(xstart, xend)
+
+        return not (coord[0] > xmin - margin and coord[0] > xmax + margin or
+                    coord[2] < xmin - margin and coord[2] < xmax + margin)
+
+    def _y_intersecting_coords(self, coord, ystart, yend, margin):
+        # does rect lie within ystart and yend
+        ymin = min(ystart, yend)
+        ymax = max(ystart, yend)
+
+        return not (coord[1] > ymin - margin and coord[1] > ymax + margin or
+                    coord[3] < ymin - margin and coord[3] < ymax + margin)
