@@ -135,14 +135,13 @@ class PitchFinder(object):
 
         g = glyph
         y_add = 0
-        # use only right portion of f clefs when getting center_of_mass
+
         if 'clef.f' in glyph.get_main_id():
-            g, y_add = self._preprocess_f_clef(g)
+            g, y_add = self._vector_process_f_clef(g)
 
         center_of_mass = 0
 
         if g.ncols > self.discard_size and g.nrows > self.discard_size:
-
             if g.ncols < self.avg_punctum:
                 this_punctum_size = g.ncols
             else:
@@ -152,6 +151,7 @@ class PitchFinder(object):
                                     ((g.offset_x + 1.0 * this_punctum_size - 1), (g.offset_y + g.nrows - 1)))
             projection_vector = temp_glyph.projection_rows()
             center_of_mass = self._center_of_mass(projection_vector)
+
         else:
             center_of_mass = 0
 
@@ -169,7 +169,8 @@ class PitchFinder(object):
         com = s / v
         return com
 
-    def _preprocess_f_clef(self, glyph):
+    def _vector_process_f_clef(self, glyph):
+        # use only right portion of f clefs when getting center_of_mass
         g = None
 
         for gl in glyph.splitx(0.5):
