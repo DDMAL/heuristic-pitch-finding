@@ -11,7 +11,7 @@ Heuristic Pitch Finding is deployed as a Rodan [Job Package](https://github.com/
 ``` python
     volumes:
      - ./jobs/settings.py:/code/rodan/rodan/settings.py
-     - ./jobs/heuristic-pitch-finding/rodan_job:/code/rodan/rodan/jobs/heuristic-pitch-finding
+     - ./jobs/heuristic-pitch-finding/:/code/rodan/rodan/jobs/heuristic-pitch-finding
 ```
 3. If one does not already exist, create a python file called `settings.py` in the rodan jobs folder like so: `/path/to/rodan_docker/jobs/settings.py`
 4. Copy and paste the contents of `settings.py.job_development` into `settings.py`
