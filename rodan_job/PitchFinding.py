@@ -85,11 +85,7 @@ class PitchFinder(object):
             glyph_var = g.get_main_id().split('.')
             glyph_type = glyph_var[0]
 
-            # find glyph's center_of_mass
-            if glyph_type == 'neume':
-                center_of_mass = self._process_neume(g)
-            else:
-                center_of_mass = self._x_projection_vector(g)
+            center_of_mass = self._x_projection_vector(g)
 
             # find staff for current glyph
             stinfo = self._get_staff_no(g, center_of_mass)
@@ -118,16 +114,6 @@ class PitchFinder(object):
     ##################
     # Glyph Position
     ##################
-
-    def _process_neume(self, g):
-        g_cc = None
-        sub_glyph_center_of_mass = None
-        glyph_id = g.get_main_id()
-        glyph_var = glyph_id.split('.')
-        glyph_type = glyph_var[0]
-        check_additions = False
-
-        return self._x_projection_vector(g)
 
     def _x_projection_vector(self, glyph):
         # creates a subimage of the original glyph
