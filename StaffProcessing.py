@@ -1,23 +1,35 @@
 from gamera.core import ONEBIT
 from gamera.toolkits import musicstaves
+# from rodan.jobs.gamera_rodan.helpers.poly_lists import fix_poly_point_list, create_polygon_outer_points_json_dict
 
 import copy
 
 
-class StaffFinder(object):
+class StaffProcessor(object):
 
     def __init__(self, **kwargs):
+        # miyao staff finding
+        self.scanlines = 20
+        self.lines_per_staff = 4
+        self.tolerance = -1
+        self.blackness = 0.8
+        self.sfnd_algorithm = 0
 
-        self.lines_per_staff = kwargs['lines_per_staff']
-        self.sfnd_algorithm = kwargs['staff_finder']
-        self.binarization = kwargs['binarization']
+        self.staff_finder = None
+        self.binarization = 1
+
+        # staff processing
         self.interpolation = kwargs['interpolation']
+        self.auto_merge = True
+
+        self.avg_staff_height = None
+        self.merge_distance = 0.7
 
         # the results of the staff finder. Mostly for convenience
-        self.staff_finder = None
         self.staves = None
         self.staff_bounds = None
 
+        # results
         self.staff_results = {}
 
     ####################
@@ -25,12 +37,23 @@ class StaffFinder(object):
     ####################
 
     def get_staves(self, image):
+        # run miyao staff finding, only for local use
 
         if image.data.pixel_type != ONEBIT:
             image = self._binarize_image(image)
 
         s = self._get_staff_finding_algorithm(image, self.sfnd_algorithm)
-        self._find_staves(s)
+        return self._find_staves(s)
+
+    def process_staves(self, staves):
+        # process output of miyao staff finding
+        self.staves = staves
+        self.avg_staff_height = self._average_staff_height(staves)
+
+        if self.interpolation:
+            self.staves = self._interpolate_staff_locations(self.staves)
+        self._staff_coords()
+
         self._process_staves()
 
         output = []
@@ -67,46 +90,6 @@ class StaffFinder(object):
         }
 
         return output
-
-    def _binarize_image(self, image):
-        image_resolution = image.resolution
-        image = image.to_greyscale()
-        bintypes = ['threshold',
-                    'otsu_threshold',
-                    'sauvola_threshold',
-                    'niblack_threshold',
-                    'gatos_threshold',
-                    'abutaleb_threshold',
-                    'tsai_moment_preserving_threshold',
-                    'white_rohrer_threshold']
-        image = getattr(image, bintypes[self.binarization])(0)
-        # BUGFIX: sometimes an image loses its resolution after being binarized.
-        if image.resolution < 1:
-            image.resolution = image_resolution
-
-        # check the amount of blackness of the image. If it's inverted,
-        # the black area will vastly outweigh the white area.
-        area = image.area().tolist()[0]
-        black_area = image.black_area()[0]
-
-        if area == 0:
-            raise AomrError("Cannot divide by a zero area. Something is wrong.")
-
-        # if greater than 70% black, invert the image.
-        if (black_area / area) > 0.7:
-            image.invert()
-
-        return image
-
-    def _get_staff_finding_algorithm(self, image, sfnd_alg):
-        if sfnd_alg == 0:
-            return musicstaves.StaffFinder_miyao(image)
-        elif sfnd_alg is 1:
-            return musicstaves.StaffFinder_dalitz(image)
-        elif sfnd_alg is 2:
-            return musicstaves.StaffFinder_projections(image)
-        else:
-            raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
     #################
     # Interpolation
@@ -215,14 +198,54 @@ class StaffFinder(object):
             interpolated_staves[i]['line_positions'] = newSet
         return interpolated_staves
 
-    #################
-    # Staff Finding
-    #################
+    ###########################
+    # Staff Finding Holdovers
+    ###########################
+
+    def _binarize_image(self, image):
+        image_resolution = image.resolution
+        image = image.to_greyscale()
+        bintypes = ['threshold',
+                    'otsu_threshold',
+                    'sauvola_threshold',
+                    'niblack_threshold',
+                    'gatos_threshold',
+                    'abutaleb_threshold',
+                    'tsai_moment_preserving_threshold',
+                    'white_rohrer_threshold']
+        image = getattr(image, bintypes[self.binarization])(0)
+        # BUGFIX: sometimes an image loses its resolution after being binarized.
+        if image.resolution < 1:
+            image.resolution = image_resolution
+
+        # check the amount of blackness of the image. If it's inverted,
+        # the black area will vastly outweigh the white area.
+        area = image.area().tolist()[0]
+        black_area = image.black_area()[0]
+
+        if area == 0:
+            raise AomrError("Cannot divide by a zero area. Something is wrong.")
+
+        # if greater than 70% black, invert the image.
+        if (black_area / area) > 0.7:
+            image.invert()
+
+        return image
+
+    def _get_staff_finding_algorithm(self, image, sfnd_alg):
+        if sfnd_alg == 0:
+            return musicstaves.StaffFinder_miyao(image)
+        elif sfnd_alg is 1:
+            return musicstaves.StaffFinder_dalitz(image)
+        elif sfnd_alg is 2:
+            return musicstaves.StaffFinder_projections(image)
+        else:
+            raise AomrStaffFinderNotFoundError("The staff finding algorithm was not found.")
 
     def _find_staves(self, s):
-        scanlines = 20
-        blackness = 0.8
-        tolerance = -1
+        scanlines = self.scanlines
+        blackness = self.blackness
+        tolerance = self.tolerance
 
         # there is no one right value for these things. We'll give it the old college try
         # until we find something that works.
@@ -240,6 +263,10 @@ class StaffFinder(object):
 
             # get a polygon object. This stores a set of vertices for x,y values along the staffline.
             self.staff_finder = s.get_polygon()
+
+            # poly_list = fix_poly_point_list(self.staff_finder, s.staffspace_height)
+            # poly_json_list = create_polygon_outer_points_json_dict(poly_list)
+            # print poly_json_list
 
             if not self.staff_finder:
                 lg.debug("No staves found. Decreasing blackness.")
@@ -360,87 +387,7 @@ class StaffFinder(object):
             }
             all_line_positions.append(self.staff_results[i])
 
-        self.staves = all_line_positions
-        if self.interpolation:
-            self.staves = self._interpolate_staff_locations(self.staves)
-        self._staff_coords()
-
-    def _process_staves(self):
-        self.staves = self._reorder_staves_LTR_TTB(self.staves)
-
-    def _reorder_staves_LTR_TTB(self, staves):
-        # reorder staves left to right, top to bottom
-
-        ordered_staves = []
-
-        # group by y intersection
-        for i, st in enumerate(staves):
-
-            # initial staff
-            if not ordered_staves:
-                ordered_staves.append([st])
-            else:
-                col_placement = -1  # vertical insert
-                for j, group in enumerate(ordered_staves):
-
-                    y_intersects = False
-                    row_placement = -1  # horizontal insert
-
-                    # find if st intersects any staff in this group
-                    for k, st2 in enumerate(group):
-                        if self._y_intersecting_coords(st['coords'], st2['coords'][1], st2['coords'][3]):
-                            y_intersects = True,
-                            if st['coords'][0] > st2['coords'][0]:
-                                row_placement = k + 1   # get row pos
-                            print 'y_intersects', k
-
-                    # place in correct row
-                    if y_intersects:
-                        group.insert(row_placement, st)
-                        break
-
-                    # get col pos
-                    elif st['coords'][1] > max(st2['coords'][1] for st2 in group):
-                        col_placement = j + 1
-
-                if not y_intersects:
-                    ordered_staves.insert(col_placement, [st])
-
-        # number staves and flatten
-        numbered_staves = []
-        count = 0
-        for group in ordered_staves:
-            for st in group:
-                count += 1
-                st['staff_no'] = count
-                numbered_staves.append(st)
-
-        print[[x['staff_no'] for x in group] for group in ordered_staves]
-        print[x['staff_no'] for x in numbered_staves]
-
-        return numbered_staves
-
-    def _staff_coords(self):
-        """
-            Returns the coordinates for each one of the staves
-        """
-        st_coords = []
-        for i, staff in enumerate(self.staff_finder):
-            st_coords.append(self.staff_results[i]['coords'])
-
-        self.staff_bounds = st_coords
-
-    ###########
-    # Utility
-    ###########
-
-    def _y_intersecting_coords(self, coord, ymin, ymax):
-        # does rect lie within ymin and ymax
-        ymin = min(ymin, ymax)
-        ymax = max(ymin, ymax)
-
-        return not (coord[1] > ymin and coord[1] > ymax or
-                    coord[3] < ymin and coord[3] < ymax)
+        return all_line_positions
 
     def _flatten(self, l, ltypes=(list, tuple)):
 
@@ -457,3 +404,203 @@ class StaffFinder(object):
                     l[i:i + 1] = l[i]
             i += 1
         return ltype(l)
+
+    ###################
+    # Post Processing
+    ###################
+
+    def _process_staves(self):
+        staff_groups = self._reorder_staves_LTR_TTB(self.staves)
+        if self.auto_merge:
+            staff_groups = self._auto_merge(staff_groups)
+
+        self.staves = self._flatten_and_renumber(staff_groups)
+
+    def _reorder_staves_LTR_TTB(self, staves):
+        # reorder staves left to right, top to bottom
+
+        ordered_staves = []
+
+        # group by y intersection
+        for i, st in enumerate(staves):
+            c1 = st['coords']
+
+            # initial staff
+            if not ordered_staves:
+                # print '\n\nfirst', 'r:', 0, ', c:', 0
+                # print 'staff_no', st['staff_no'], st['coords']
+                ordered_staves.append([st])
+
+            else:
+                col_placement = 0       # vertical insert
+                for j, group in enumerate(ordered_staves):
+
+                    y_intersects = False
+                    row_placement = 0   # horizontal insert
+
+                    # find if st intersects any staff in this group
+                    for k, st2 in enumerate(group):
+                        c2 = st2['coords']
+
+                        if self._y_intersecting_coords(c1, c2, 0):
+                            y_intersects = True
+
+                        if c1[0] > c2[0]:
+                            row_placement = k + 1   # get row pos
+
+                    # place in correct row
+                    if y_intersects:
+                        # print '\ny_intersects', 'r:', row_placement, ', c:', j
+                        # print 'staff_no', st['staff_no'], st['coords']
+                        group.insert(row_placement, st)
+                        break
+
+                    # get col pos
+                    elif st['coords'][1] > max(st2['coords'][1] for st2 in group):
+                        col_placement = j + 1
+
+                if not y_intersects:
+                    # print '\nNOT y_intersects', 'r:', 0, ', c:', col_placement
+                    # print 'staff_no', st['staff_no'], st['coords']
+                    ordered_staves.insert(col_placement, [st])
+
+        # print[[x['staff_no'] for x in group] for group in ordered_staves]
+
+        return ordered_staves
+
+    def _staff_coords(self):
+        """
+            Returns the coordinates for each one of the staves
+        """
+        st_coords = []
+        for i, staff in enumerate(self.staff_finder):
+            st_coords.append(self.staff_results[i]['coords'])
+
+        self.staff_bounds = st_coords
+
+    def _auto_merge(self, staff_groups):
+        # automatically merge staves on the same row
+
+        merged_staves = []  # all staves to be returned
+        merge = None
+        merge_margin = self.merge_distance * self.avg_staff_height
+
+        for i, group in enumerate(staff_groups):
+            row_staves = group
+
+            j = 0
+            while j < len(row_staves):
+
+                st1 = row_staves[j]
+                st2 = None if j >= len(row_staves) - 1 else row_staves[j + 1]
+
+                # merge
+                if (st2 and
+                        self._y_intersecting_coords(st1['coords'], st2['coords'], 0) and
+                        self._x_intersecting_coords(st1['coords'], st2['coords'], merge_margin) and
+                        st1['num_lines'] == st2['num_lines'] and
+                        len(st1['line_positions']) == len(st2['line_positions'])):
+
+                    merge = self._merge_staves(st1, st2)
+                    del row_staves[j:j + 2]
+                    row_staves.insert(j, merge)
+
+                # don't merge
+                else:
+                    j += 1
+
+            merged_staves.append(row_staves)
+            print[[x['staff_no']for x in group] for group in merged_staves]
+            row_staves = []
+
+        return merged_staves
+
+    def _merge_staves(self, st1, st2):
+        # combine two adjascent staves into a single staff
+        # assumes st1 is directly to the left of st2
+        # assumes both staves have same number of lines
+
+        # overlap results in cutting off st2
+
+        num_lines = st1['num_lines']
+        staff_no = st1['staff_no']  # this gets replaced later during flattening
+
+        if st1['clef_line']:
+            clef_line = st1['clef_line']
+        else:
+            clef_line = st2['clef_line']
+
+        if st1['clef_shape']:
+            clef_shape = st1['clef_shape']
+        else:
+            clef_shape = st2['clef_shape']
+
+        if st1['contents']:
+            contents = st1['contents']
+        else:
+            contents = st2['contents']
+
+        # get new staff coordinates
+        coords = [st1['coords'][0] if (st1['coords'][0] < st2['coords'][0]) else st2['coords'][0],
+                  st1['coords'][1] if (st1['coords'][1] < st2['coords'][1]) else st2['coords'][1],
+                  st1['coords'][2] if (st1['coords'][2] > st2['coords'][2]) else st2['coords'][2],
+                  st1['coords'][3] if (st1['coords'][3] > st2['coords'][3]) else st2['coords'][3],
+                  ]
+
+        # merge line positions
+        # assumes same number of lines
+        line_positions = []
+        for i in range(len(st1['line_positions'])):
+
+            # crop off any overlap from st2
+            nudge = 0
+            while st2['line_positions'][i][nudge][0] < st1['line_positions'][i][-1][0]:
+                nudge += 1
+
+            line_positions += [st1['line_positions'][i] + st2['line_positions'][i][nudge:]]
+            # print line_positions[i]
+
+        avg_lines = []
+        for i in range(len(line_positions)):
+            avg_lines += [sum(x[1] for x in line_positions[i]) / len(line_positions[i])]
+
+        st_merge = {
+            'line_positions': line_positions,
+            'clef_line': clef_line,
+            'num_lines': num_lines,
+            'clef_shape': clef_shape,
+            'staff_no': staff_no,
+            'coords': coords,
+            'avg_lines': avg_lines,
+            'contents': contents,
+        }
+
+        return st_merge
+
+    def _flatten_and_renumber(self, grouped_staves):
+
+        numbered_staves = []
+        count = 0
+        for group in grouped_staves:
+            for st in group:
+                count += 1
+                st['staff_no'] = count
+                numbered_staves.append(st)
+
+        print[x['staff_no'] for x in numbered_staves]
+        return numbered_staves
+
+    ###########
+    # Utility
+    ###########
+
+    def _y_intersecting_coords(self, coord1, coord2, margin):
+        return not (coord1[1] > coord2[3] + margin or
+                    coord1[3] < coord2[1] - margin)
+
+    def _x_intersecting_coords(self, coord1, coord2, margin):
+        return not (coord1[0] > coord2[2] + margin or
+                    coord1[2] < coord2[0] - margin)
+
+    def _average_staff_height(self, staves):
+        return sum(s['coords'][3] - s['coords'][1] for s in staves) / len(staves)

@@ -3,7 +3,7 @@ from rodan.jobs.base import RodanTask
 from gamera.core import load_image, init_gamera
 from gamera import gamera_xml
 
-from StaffFinding import StaffFinder
+from StaffProcessing import StaffProcessor
 from PitchFinding import PitchFinder
 
 import sys
@@ -12,26 +12,19 @@ import json
 init_gamera()
 
 
-class MiyaoStaffinding(RodanTask):
-    name = 'Miyao Staff Finding'
+class HeuristicStaffProcessing(RodanTask):
+    name = 'Staff Processor'
     author = 'Noah Baxter'
-    description = 'Finds the location of staves in an image and returns them as a JSOMR file.'
+    description = 'Processes raw JSOMR staff data and returns them as a new JSOMR file.'
     enabled = True
-    category = 'aOMR'
+    category = 'Pitch Finding'
     interactive = False
 
     settings = {
         'title': 'Settings',
         'type': 'object',
-        'required': ['Number of lines', 'Interpolation'],
+        'required': ['Interpolation'],
         'properties': {
-            'Number of lines': {
-                'type': 'integer',
-                'default': 4,
-                'minimum': 0,
-                'maximum': 8,
-                'description': 'Number of lines within each staff. When zero, the number is automatically detected.'
-            },
             'Interpolation': {
                 'type': 'boolean',
                 'default': True,
@@ -41,8 +34,8 @@ class MiyaoStaffinding(RodanTask):
     }
 
     input_port_types = [{
-        'name': 'Image containing staves (RGB, greyscale, or onebit)',
-        'resource_types': ['image/rgb+png', 'image/onebit+png', 'image/greyscale+png'],
+        'name': 'Comprehensive Miyao results',
+        'resource_types': ['application/json'],
         'minimum': 1,
         'maximum': 1,
         'is_list': False
@@ -59,18 +52,21 @@ class MiyaoStaffinding(RodanTask):
     def run_my_task(self, inputs, settings, outputs):
 
         # Inputs
-        image = load_image(inputs['Image containing staves (RGB, greyscale, or onebit)'][0]['resource_path'])
+        infile_path = inputs['Comprehensive Miyao results'][0]['resource_path']
+        with open(infile_path, 'r') as infile:
+            jsomr_string = infile.read()
+
+        jsomr = json.loads(jsomr_string)
+
         kwargs = {
-            'lines_per_staff': settings['Number of lines'],
-            'staff_finder': 0,          # 0 for miyao
-            'binarization': 1,
             'interpolation': settings['Interpolation'],
         }
 
-        sf = StaffFinder(**kwargs)
+        sp = StaffProcessor(**kwargs)
 
-        page = sf.get_page_properties(image)
-        staves = sf.get_staves(image)
+        page = jsomr['page']
+        staves = jsomr['staves']
+        staves = sp.process_staves(staves)
 
         jsomr = {
             'page': page,
@@ -86,7 +82,7 @@ class MiyaoStaffinding(RodanTask):
 
 
 class HeuristicPitchFinding(RodanTask):
-    name = 'Heuristic Pitch Finding'
+    name = 'Heuristic Pitch Finder'
     author = 'Noah Baxter'
     description = 'Calculates pitch values for Classified Connected Componenets from a JSOMR containing staves, and returns the results as a JSOMR file'
     settings = {
@@ -104,7 +100,7 @@ class HeuristicPitchFinding(RodanTask):
         }
     }
     enabled = True
-    category = 'aOMR'
+    category = 'Pitch Finding'
     interactive = False
     input_port_types = [{
         'name': 'JSOMR of staves and page properties',
@@ -112,8 +108,7 @@ class HeuristicPitchFinding(RodanTask):
         'minimum': 1,
         'maximum': 1,
         'is_list': False
-    },
-        {
+    }, {
         'name': 'GameraXML - Classified Connected Components',
         'resource_types': ['application/gamera+xml'],
         'minimum': 1,
