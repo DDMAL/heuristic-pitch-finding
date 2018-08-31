@@ -10,7 +10,7 @@ class PitchFinder(object):
         self.discard_size = kwargs['discard_size']
 
         self.SCALE = ['c', 'd', 'e', 'f', 'g', 'a', 'b']
-        self.clef = 'c', 3              # default clef
+        self.clef = 'c', 7              # default clef
 
         self.transpose = 0              # shift all notes by x 2nds
         self.space_proportion = 0.5     # space when within middle portion between lines
@@ -49,6 +49,8 @@ class PitchFinder(object):
             for j, pf in enumerate(g[1:]):
                 pitch_info[pitch_feature_names[j]] = str(pf)
             cur_json['pitch'] = pitch_info
+
+            # print g[0].get_main_id()
 
             # get glyph information
             glyph_info['bounding_box'] = {
@@ -461,7 +463,6 @@ class PitchFinder(object):
 
                 # overwrite last defined clef
                 self.clef = glyph_array[0].get_main_id().split('.')[1], glyph_array[3]
-
                 glyph_array[3] = 6 - glyph_array[3] / 2  # get clef line excluding spaces
                 glyph_array.extend([None, None, None, None])
 

@@ -430,6 +430,118 @@ class StaffFinder(object):
 
         self.staff_bounds = st_coords
 
+    def _auto_merge(self, staff_groups):
+        # automatically merge staves on the same row
+
+        merged_staves = []  # all staves to be returned
+        merge = None
+        merge_margin = self.merge_distance * self.avg_staff_height
+
+        for i, group in enumerate(staff_groups):
+            row_staves = group
+
+            j = 0
+            while j < len(row_staves):
+
+                st1 = row_staves[j]
+                st2 = None if j >= len(row_staves) - 1 else row_staves[j + 1]
+
+                # merge
+                if (st2 and
+                        self._y_intersecting_coords(st1['coords'], st2['coords'], 0) and
+                        self._x_intersecting_coords(st1['coords'], st2['coords'], merge_margin) and
+                        st1['num_lines'] == st2['num_lines'] and
+                        len(st1['line_positions']) == len(st2['line_positions'])):
+
+                    merge = self._merge_staves(st1, st2)
+                    del row_staves[j:j + 2]
+                    row_staves.insert(j, merge)
+
+                # don't merge
+                else:
+                    j += 1
+
+            merged_staves.append(row_staves)
+            # print[[x['staff_no']for x in group] for group in merged_staves]
+            row_staves = []
+
+        return merged_staves
+
+    def _merge_staves(self, st1, st2):
+        # combine two adjascent staves into a single staff
+        # assumes st1 is directly to the left of st2
+        # assumes both staves have same number of lines
+
+        # overlap results in cutting off st2
+
+        num_lines = st1['num_lines']
+        staff_no = st1['staff_no']  # this gets replaced later during flattening
+
+        if st1['clef_line']:
+            clef_line = st1['clef_line']
+        else:
+            clef_line = st2['clef_line']
+
+        if st1['clef_shape']:
+            clef_shape = st1['clef_shape']
+        else:
+            clef_shape = st2['clef_shape']
+
+        if st1['contents']:
+            contents = st1['contents']
+        else:
+            contents = st2['contents']
+
+        # get new staff coordinates
+        coords = [st1['coords'][0] if (st1['coords'][0] < st2['coords'][0]) else st2['coords'][0],
+                  st1['coords'][1] if (st1['coords'][1] < st2['coords'][1]) else st2['coords'][1],
+                  st1['coords'][2] if (st1['coords'][2] > st2['coords'][2]) else st2['coords'][2],
+                  st1['coords'][3] if (st1['coords'][3] > st2['coords'][3]) else st2['coords'][3],
+                  ]
+
+        # merge line positions
+        # assumes same number of lines
+        line_positions = []
+        for i in range(len(st1['line_positions'])):
+
+            # crop off any overlap from st2
+            nudge = 0
+            while st2['line_positions'][i][nudge][0] < st1['line_positions'][i][-1][0]:
+                nudge += 1
+
+            line_positions += [st1['line_positions'][i] + st2['line_positions'][i][nudge:]]
+            # print line_positions[i]
+
+        avg_lines = []
+        for i in range(len(line_positions)):
+            avg_lines += [sum(x[1] for x in line_positions[i]) / len(line_positions[i])]
+
+        st_merge = {
+            'line_positions': line_positions,
+            'clef_line': clef_line,
+            'num_lines': num_lines,
+            'clef_shape': clef_shape,
+            'staff_no': staff_no,
+            'coords': coords,
+            'avg_lines': avg_lines,
+            'contents': contents,
+        }
+
+        return st_merge
+
+    def _flatten_and_renumber(self, grouped_staves):
+
+        numbered_staves = []
+        count = 0
+        for group in grouped_staves:
+            for st in group:
+                count += 1
+                st['staff_no'] = count
+                numbered_staves.append(st)
+
+        # print[x['staff_no'] for x in numbered_staves]
+        return numbered_staves
+
     ###########
     # Utility
     ###########
