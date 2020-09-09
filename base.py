@@ -23,6 +23,7 @@ class MiyaoStaffinding(RodanTask):
     settings = {
         'title': 'Settings',
         'type': 'object',
+        'job_queue': 'Python2',
         'required': ['Number of lines', 'Interpolation'],
         'properties': {
             'Number of lines': {
