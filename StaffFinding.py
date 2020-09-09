@@ -34,6 +34,10 @@ class StaffFinder(object):
         self._process_staves()
 
         output = []
+        # Fixes: Title page with no information bug
+        if self.staves is None:
+            return []
+
         for i, s in enumerate(self.staves):
 
             bounding_box = {
@@ -373,6 +377,10 @@ class StaffFinder(object):
 
         ordered_staves = []
 
+        # Fixes: Title page with no information bug
+        if staves is None:
+            return None
+
         # group by y intersection
         for i, st in enumerate(staves):
 
@@ -415,8 +423,8 @@ class StaffFinder(object):
                 st['staff_no'] = count
                 numbered_staves.append(st)
 
-        print[[x['staff_no'] for x in group] for group in ordered_staves]
-        print[x['staff_no'] for x in numbered_staves]
+        print [[x['staff_no'] for x in group] for group in ordered_staves]
+        print [x['staff_no'] for x in numbered_staves]
 
         return numbered_staves
 
